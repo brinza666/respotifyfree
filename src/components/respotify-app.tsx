@@ -360,15 +360,7 @@ function TransferStep() {
       </div>
       {error && <Callout tone="danger">{error}</Callout>}
       {notice && <Callout>{notice}</Callout>}
-      {progress?.errors.length ? (
-        <ul className="rounded-lg border border-border bg-surface p-4 text-sm text-muted">
-          {progress.errors.slice(0, 6).map((e, i) => (
-            <li key={i}>
-              {e.item}: {e.message}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {progress?.errors.length ? <ErrorList errors={progress.errors} /> : null}
       <div className="flex flex-col gap-2">
         {busy ? (
           <Button variant="secondary" block onClick={pause}>
@@ -409,9 +401,7 @@ function DoneStep() {
           ))}
         </ul>
       )}
-      {report?.errors.length ? (
-        <Callout tone="danger">{report.errors.length} items could not be copied.</Callout>
-      ) : null}
+      {report?.errors.length ? <ErrorList errors={report.errors} /> : null}
       <div className="flex flex-col gap-2">
         <Button
           variant="secondary"
@@ -546,6 +536,24 @@ function Honesty() {
         </div>
       </div>
     </aside>
+  );
+}
+
+function ErrorList({ errors }: { errors: { item: string; message: string }[] }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-danger/40 bg-danger/10">
+      <p className="border-b border-danger/30 px-4 py-3 text-sm">
+        {errors.length} item{errors.length === 1 ? "" : "s"} could not be copied
+      </p>
+      <ul className="max-h-80 overflow-y-auto">
+        {errors.map((e, i) => (
+          <li key={`${e.item}-${i}`} className="border-t border-danger/20 px-4 py-3 text-sm">
+            <p className="font-medium">{e.item}</p>
+            <p className="mt-1 break-words text-muted">{e.message}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

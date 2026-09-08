@@ -156,6 +156,32 @@ function BottomNav({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   );
 }
 
+function DemoVideo() {
+  const t = useT();
+  const locale = useRespotify((s) => s.locale);
+  const base = import.meta.env.BASE_URL;
+  const src = `${base}demo-${locale}.mp4`;
+  const poster = `${base}demo-${locale}.jpg`;
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between">
+        <p className="text-sm font-medium">{t("watchDemo")}</p>
+        <p className="text-xs text-faint">{t("watchDemoHelp")}</p>
+      </div>
+      <video
+        key={src}
+        controls
+        playsInline
+        preload="metadata"
+        poster={poster}
+        className="mx-auto max-h-[min(70vh,640px)] w-full bg-bg object-contain"
+      >
+        <source src={src} type="video/mp4" />
+      </video>
+    </section>
+  );
+}
+
 function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
   const t = useT();
   const source = useRespotify((s) => s.source);
@@ -178,6 +204,10 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
         </h1>
         <p className="max-w-prose text-muted">{t("lead")}</p>
       </section>
+
+      {typeof window !== "undefined" && new URLSearchParams(window.location.search).has("shot") ? null : (
+        <DemoVideo />
+      )}
 
       <div className="flex flex-col gap-3">
         <AccountCard

@@ -33,6 +33,8 @@ const en = {
   readingLibrary: "Reading library…",
   runDemo: "Run demo transfer",
   openSetup: "Setup and Android APK",
+  watchDemo: "Watch a walkthrough",
+  watchDemoHelp: "Silent demo. Nothing is written to Spotify.",
   copyFollowed: "Copy followed playlists as new",
   copyFollowedHelp:
     "On before you scan. Radio / Popular lists rebuild from Spotify search when the original songs are hidden. Uncheck to only follow the original list.",
@@ -148,6 +150,8 @@ const ru: typeof en = {
   readingLibrary: "Читаем библиотеку…",
   runDemo: "Демо-перенос",
   openSetup: "Настройка и Android APK",
+  watchDemo: "Смотреть, как это работает",
+  watchDemoHelp: "Немое демо. В Spotify ничего не пишется.",
   copyFollowed: "Копировать чужие плейлисты как новые",
   copyFollowedHelp:
     "Включайте до сканирования. Радио и Popular собираются поиском Spotify, если исходные треки скрыты. Снимите галочку, чтобы только подписаться на оригинал.",

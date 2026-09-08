@@ -86,12 +86,16 @@ async function paginate<T>(
   role: Role,
   path: string,
   pick: (json: Record<string, unknown>) => T[],
+  opts?: { skipStatuses?: number[] },
 ): Promise<T[]> {
   const out: T[] = [];
   let next: string | null = path;
   while (next) {
     const res = await spotifyFetch(role, next);
-    if (!res.ok) throw new Error(`Spotify ${res.status} on ${path}`);
+    if (!res.ok) {
+      if (opts?.skipStatuses?.includes(res.status)) return out;
+      throw new Error(`Spotify ${res.status} on ${path}`);
+    }
     const json = (await res.json()) as Record<string, unknown> & {
       next?: string | null;
       artists?: { next?: string | null; items?: unknown[] };
@@ -101,6 +105,17 @@ async function paginate<T>(
     next = json.next ?? json.artists?.next ?? null;
   }
   return out;
+}
+
+async function playlistTracks(role: Role, playlistId: string): Promise<TrackRef[]> {
+  // Some library playlists (Made For You, local files, region-locked) return 403
+  // on /tracks. Skip them so one playlist cannot abort the whole sync.
+  return paginate(
+    role,
+    `/playlists/${playlistId}/tracks?limit=100&market=from_token`,
+    (j) => itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x)),
+    { skipStatuses: [403, 404] },
+  );
 }
 
 function asTrack(item: unknown): TrackRef | null {
@@ -200,9 +215,7 @@ export async function grabLiveLibrary(role: Role): Promise<LibrarySnapshot> {
       owner?: { id?: string };
     };
     if (!p.id) continue;
-    const tracks = await paginate(role, `/playlists/${p.id}/tracks?limit=100`, (j) =>
-      itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x)),
-    );
+    const tracks = await playlistTracks(role, p.id);
     detailed.push({
       id: p.id,
       name: p.name ?? "Untitled playlist",

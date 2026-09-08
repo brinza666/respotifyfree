@@ -45,6 +45,7 @@ type Store = {
   startTransfer: () => Promise<void>;
   pause: () => void;
   reset: () => void;
+  backFromWizard: () => void;
   importFile: (file: File) => Promise<void>;
   abort?: AbortController;
 };
@@ -204,6 +205,20 @@ export const useRespotify = create<Store>((set, get) => ({
       busy: false,
       selection: structuredClone(DEFAULT_SELECTION),
     });
+  },
+
+  backFromWizard: () => {
+    const { step } = get();
+    if (step === "select") {
+      get().reset();
+      return;
+    }
+    if (step === "transfer") {
+      get().pause();
+      set({ step: "select", busy: false });
+      return;
+    }
+    if (step === "done") get().reset();
   },
 
   importFile: async (file) => {

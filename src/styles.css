@@ -36,6 +36,8 @@
     color: var(--color-fg);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   button:not(:disabled),

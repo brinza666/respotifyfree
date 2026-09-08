@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  ArrowLeftRight,
   ArrowRight,
   Check,
   Disc3,
   Download,
   FolderInput,
   Pause,
+  Settings,
   Shield,
+  Smartphone,
   Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,23 +18,47 @@ import { CATALOG_LABELS, countsFor, snapshotToBackup, useRespotify } from "@/lib
 import type { CatalogKey, Session } from "@/lib/spotify/types";
 import { cn } from "@/lib/utils";
 
+type Tab = "transfer" | "backup" | "setup";
+
 export function RespotifyApp() {
   const hydrate = useRespotify((s) => s.hydrate);
   const step = useRespotify((s) => s.step);
+  const backFromWizard = useRespotify((s) => s.backFromWizard);
+  const [tab, setTab] = useState<Tab>("transfer");
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
+  useEffect(() => {
+    if (step === "home") return;
+    window.history.pushState({ respotify: step }, "");
+  }, [step]);
+
+  useEffect(() => {
+    const onPop = () => {
+      backFromWizard();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [backFromWizard]);
+
   return (
-    <div className="min-h-dvh bg-bg text-fg">
+    <div className="flex min-h-dvh flex-col bg-bg text-fg">
       <Header />
-      <main className="mx-auto w-full max-w-xl px-4 pb-24 pt-6 sm:px-6">
-        {step === "home" && <HomeStep />}
-        {step === "select" && <SelectStep />}
-        {step === "transfer" && <TransferStep />}
-        {step === "done" && <DoneStep />}
+      <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-28 pt-6 sm:px-6">
+        {tab === "transfer" && (
+          <>
+            {step === "home" && <HomeStep onOpenSetup={() => setTab("setup")} />}
+            {step === "select" && <SelectStep />}
+            {step === "transfer" && <TransferStep />}
+            {step === "done" && <DoneStep />}
+          </>
+        )}
+        {tab === "backup" && <BackupTab />}
+        {tab === "setup" && <SetupTab />}
       </main>
+      <BottomNav tab={tab} onTab={setTab} />
     </div>
   );
 }
@@ -39,7 +66,7 @@ export function RespotifyApp() {
 function Header() {
   const step = useRespotify((s) => s.step);
   return (
-    <header className="border-b border-border/80">
+    <header className="border-b border-border/80 pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
           <Disc3 className="size-5 text-primary" strokeWidth={1.6} />
@@ -53,22 +80,52 @@ function Header() {
   );
 }
 
-function HomeStep() {
+function BottomNav({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+  const items: { id: Tab; label: string; icon: typeof ArrowLeftRight }[] = [
+    { id: "transfer", label: "Transfer", icon: ArrowLeftRight },
+    { id: "backup", label: "Backup", icon: FolderInput },
+    { id: "setup", label: "Setup", icon: Settings },
+  ];
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
+      aria-label="App"
+    >
+      <div className="mx-auto grid max-w-xl grid-cols-3">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const active = tab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onTab(item.id)}
+              className={cn(
+                "flex min-h-14 flex-col items-center justify-center gap-1 text-xs font-medium",
+                active ? "text-primary" : "text-faint",
+              )}
+            >
+              <Icon className="size-5" strokeWidth={1.7} />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
   const source = useRespotify((s) => s.source);
   const dest = useRespotify((s) => s.dest);
-  const clientIdValue = useRespotify((s) => s.clientId);
-  const redirectUri = useRespotify((s) => s.redirectUri);
   const error = useRespotify((s) => s.error);
   const notice = useRespotify((s) => s.notice);
   const busy = useRespotify((s) => s.busy);
-  const setClientIdValue = useRespotify((s) => s.setClientIdValue);
   const connectDemo = useRespotify((s) => s.connectDemo);
   const connectLive = useRespotify((s) => s.connectLive);
   const disconnect = useRespotify((s) => s.disconnect);
   const runDemoBoth = useRespotify((s) => s.runDemoBoth);
   const loadSourceLibrary = useRespotify((s) => s.loadSourceLibrary);
-  const importFile = useRespotify((s) => s.importFile);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="flex flex-col gap-8">
@@ -79,7 +136,7 @@ function HomeStep() {
         </h1>
         <p className="max-w-prose text-muted">
           Connect two accounts through Spotify’s own login, then copy playlists, liked songs, albums,
-          artists, and podcasts. Tokens stay in this browser.
+          artists, and podcasts. Tokens stay on this phone.
         </p>
       </section>
 
@@ -106,62 +163,19 @@ function HomeStep() {
       {notice && <Callout>{notice}</Callout>}
 
       <div className="flex flex-col gap-2">
-        <Button
-          block
-          disabled={!source || !dest || busy}
-          onClick={() => void loadSourceLibrary()}
-        >
+        <Button block disabled={!source || !dest || busy} onClick={() => void loadSourceLibrary()}>
           {busy ? "Reading library…" : "Continue"}
           <ArrowRight className="size-4" />
         </Button>
         <Button variant="secondary" block onClick={runDemoBoth}>
           Run demo transfer
         </Button>
+        <Button variant="ghost" block onClick={onOpenSetup}>
+          Client ID and install
+        </Button>
       </div>
 
       <Honesty />
-
-      <details className="rounded-xl border border-border bg-surface p-4">
-        <summary className="cursor-pointer text-sm font-medium">Live Spotify setup</summary>
-        <div className="mt-4 flex flex-col gap-3">
-          <p className="text-sm text-muted">
-            Create an app in the Spotify Developer Dashboard, then paste the Client ID. Add this
-            Redirect URI exactly:
-          </p>
-          <CopyField value={redirectUri} />
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="text-muted">Client ID</span>
-            <input
-              value={clientIdValue}
-              onChange={(e) => setClientIdValue(e.target.value)}
-              placeholder="Paste your Spotify Client ID"
-              className="min-h-11 rounded-md border border-border bg-raised px-3 text-fg placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/70"
-            />
-          </label>
-          <p className="text-xs text-faint">
-            Without a Client ID, Connect uses demo accounts so you can try the full flow.
-          </p>
-        </div>
-      </details>
-
-      <div className="flex flex-col gap-2">
-        <p className="text-xs font-medium uppercase tracking-[0.14em] text-faint">Restore</p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void importFile(file);
-            e.target.value = "";
-          }}
-        />
-        <Button variant="secondary" block onClick={() => fileRef.current?.click()}>
-          <FolderInput className="size-4" />
-          Import backup or Spotify privacy export
-        </Button>
-      </div>
     </div>
   );
 }
@@ -233,7 +247,7 @@ function SelectStep() {
   const setPrecise = useRespotify((s) => s.setPrecise);
   const setCopyFollowed = useRespotify((s) => s.setCopyFollowed);
   const startTransfer = useRespotify((s) => s.startTransfer);
-  const reset = useRespotify((s) => s.reset);
+  const backFromWizard = useRespotify((s) => s.backFromWizard);
   const counts = useMemo(() => (snapshot ? countsFor(snapshot) : null), [snapshot]);
 
   if (!snapshot || !counts) return null;
@@ -302,7 +316,7 @@ function SelectStep() {
         <Button block onClick={() => void startTransfer()}>
           Start transfer
         </Button>
-        <Button variant="ghost" onClick={reset}>
+        <Button variant="ghost" onClick={backFromWizard}>
           Back
         </Button>
       </div>
@@ -411,6 +425,107 @@ function DoneStep() {
         <Button block onClick={reset}>
           Start another transfer
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function BackupTab() {
+  const snapshot = useRespotify((s) => s.snapshot);
+  const importFile = useRespotify((s) => s.importFile);
+  const notice = useRespotify((s) => s.notice);
+  const error = useRespotify((s) => s.error);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-display text-3xl tracking-tight">Backup</h1>
+        <p className="mt-2 text-sm text-muted">
+          Download a JSON snapshot of the source library, or restore a Respotify backup / Spotify
+          privacy export as playlists.
+        </p>
+      </div>
+      {error && <Callout tone="danger">{error}</Callout>}
+      {notice && <Callout>{notice}</Callout>}
+      <Button
+        variant="secondary"
+        block
+        disabled={!snapshot}
+        onClick={() => snapshot && downloadBackup(snapshotToBackup(snapshot))}
+      >
+        <Download className="size-4" />
+        {snapshot ? "Download current library" : "Connect a source first"}
+      </Button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void importFile(file);
+          e.target.value = "";
+        }}
+      />
+      <Button block onClick={() => fileRef.current?.click()}>
+        <FolderInput className="size-4" />
+        Import backup or privacy export
+      </Button>
+      <Honesty />
+    </div>
+  );
+}
+
+function SetupTab() {
+  const clientIdValue = useRespotify((s) => s.clientId);
+  const redirectUri = useRespotify((s) => s.redirectUri);
+  const setClientIdValue = useRespotify((s) => s.setClientIdValue);
+  const standalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches ||
+      ("standalone" in navigator && Boolean((navigator as { standalone?: boolean }).standalone)));
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-display text-3xl tracking-tight">Setup</h1>
+        <p className="mt-2 text-sm text-muted">
+          This phone app runs the same engine as the git repo. Spotify login is official OAuth — not
+          a Grok connector.
+        </p>
+      </div>
+
+      <section className="rounded-xl border border-border bg-surface p-4">
+        <div className="flex items-start gap-3">
+          <Smartphone className="mt-0.5 size-4 text-primary" />
+          <div className="text-sm">
+            <p className="font-medium">{standalone ? "Running as an installed app" : "Install on Android"}</p>
+            <p className="mt-1 text-muted">
+              {standalone
+                ? "Chrome opened Respotify without the browser chrome."
+                : "In Chrome: menu → Add to Home screen. Spotify login still uses Spotify’s own page, not a WebView."}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
+        <p className="text-sm font-medium">Live Spotify</p>
+        <p className="text-sm text-muted">
+          Create an app in the Spotify Developer Dashboard, add this Redirect URI, then paste the
+          Client ID.
+        </p>
+        <CopyField value={redirectUri} />
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="text-muted">Client ID</span>
+          <input
+            value={clientIdValue}
+            onChange={(e) => setClientIdValue(e.target.value)}
+            placeholder="Paste your Spotify Client ID"
+            className="min-h-11 rounded-md border border-border bg-raised px-3 text-fg placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/70"
+          />
+        </label>
       </div>
     </div>
   );

@@ -125,7 +125,7 @@ export const DEFAULT_SELECTION: TransferSelection = {
     recentArchive: true,
   },
   preciseLikes: false,
-  copyFollowedAsNew: false,
+  copyFollowedAsNew: true,
 };
 
 export const CATALOG_LABELS: Record<CatalogKey, string> = {

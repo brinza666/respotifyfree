@@ -143,12 +143,13 @@ async function fetchMe(role: Role): Promise<SpotifyUser> {
   const res = await spotifyFetch(role, "/me");
   if (!res.ok) throw new Error("Could not read the Spotify profile.");
   const me = (await res.json()) as {
-    id: string;
+    id?: string;
     display_name?: string;
     email?: string;
-    images?: { url: string }[];
+    images?: { url: string }[] | null;
     product?: string;
-  };
+  } | null;
+  if (!me?.id) throw new Error("Could not read the Spotify profile.");
   return {
     id: me.id,
     displayName: me.display_name || me.id,
@@ -184,8 +185,7 @@ async function paginate<T>(
 }
 
 async function playlistTracks(role: Role, playlistId: string): Promise<TrackRef[]> {
-  const pick = (j: Record<string, unknown>) =>
-    itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x));
+  const pick = (j: Record<string, unknown>) => compactMap(itemsOf(j), asTrack);
   const modern = await paginate(role, `/playlists/${playlistId}/items?limit=50&market=from_token`, pick, {
     skipStatuses: [403, 404],
   });
@@ -196,16 +196,21 @@ async function playlistTracks(role: Role, playlistId: string): Promise<TrackRef[
 }
 
 function asTrack(item: unknown): TrackRef | null {
+  if (item == null || typeof item !== "object") return null;
   const row = item as {
-    track?: TrackLike;
-    item?: TrackLike;
+    track?: TrackLike | null;
+    item?: TrackLike | null;
     added_at?: string;
     played_at?: string;
   } & TrackLike;
   const track = row.item ?? row.track ?? row;
-  const name = track?.name ?? "";
-  const artists = (track?.artists ?? []).map((a) => a.name).join(", ");
-  if (track?.id && track.uri?.startsWith("spotify:track:")) {
+  if (track == null || typeof track !== "object") return null;
+  const name = track.name ?? "";
+  const artists = (track.artists ?? [])
+    .map((a) => a?.name)
+    .filter((n): n is string => Boolean(n))
+    .join(", ");
+  if (track.id && track.uri?.startsWith("spotify:track:")) {
     return {
       id: track.id,
       uri: track.uri,
@@ -216,8 +221,8 @@ function asTrack(item: unknown): TrackRef | null {
   }
   if (name) {
     return {
-      id: track?.id ?? "",
-      uri: track?.uri ?? "",
+      id: track.id ?? "",
+      uri: track.uri ?? "",
       name,
       artists,
       addedAt: row.added_at ?? row.played_at,
@@ -230,10 +235,62 @@ type TrackLike = {
   id?: string;
   uri?: string;
   name?: string;
-  artists?: { name: string }[];
+  artists?: { name?: string }[] | null;
 };
 
-function itemsOf(json: Record<string, unknown>): unknown[] {
+function compactMap<T>(items: unknown[], map: (item: unknown) => T | null): T[] {
+  const out: T[] = [];
+  for (const item of items) {
+    if (item == null) continue;
+    const next = map(item);
+    if (next) out.push(next);
+  }
+  return out;
+}
+
+function asAlbum(item: unknown): AlbumRef | null {
+  const album = (item as { album?: { id?: string; name?: string; artists?: { name?: string }[] | null } | null } | null)
+    ?.album;
+  if (!album?.id) return null;
+  return {
+    id: album.id,
+    name: album.name ?? "Untitled album",
+    artists: (album.artists ?? [])
+      .map((a) => a?.name)
+      .filter((n): n is string => Boolean(n))
+      .join(", "),
+  };
+}
+
+function asShow(item: unknown): ShowRef | null {
+  const show = (item as { show?: { id?: string; name?: string } | null } | null)?.show;
+  if (!show?.id) return null;
+  return { id: show.id, name: show.name ?? show.id };
+}
+
+function asEpisode(item: unknown): EpisodeRef | null {
+  const episode = (item as { episode?: { id?: string; name?: string } | null } | null)?.episode;
+  if (!episode?.id) return null;
+  return { id: episode.id, name: episode.name ?? episode.id };
+}
+
+function asArtist(item: unknown): ArtistRef | null {
+  const row = item as { id?: string; name?: string } | null;
+  if (!row?.id) return null;
+  return { id: row.id, name: row.name ?? row.id };
+}
+
+async function tryCatalog<T>(label: string, run: () => Promise<T[]>, warnings: string[]): Promise<T[]> {
+  try {
+    return await run();
+  } catch (err) {
+    warnings.push(`${label} could not be read: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
+}
+
+function itemsOf(json: Record<string, unknown> | null | undefined): unknown[] {
+  if (!json || typeof json !== "object") return [];
   if (Array.isArray(json.items)) return json.items;
   const artists = json.artists as { items?: unknown[] } | undefined;
   if (Array.isArray(artists?.items)) return artists.items;
@@ -272,12 +329,10 @@ async function searchPlaylists(role: Role, q: string): Promise<{ id: string; nam
   );
   if (!res.ok) return [];
   const json = (await res.json()) as Record<string, unknown>;
-  return itemsOf((json.playlists as Record<string, unknown>) ?? {})
-    .map((raw) => {
-      const p = raw as { id?: string; name?: string };
-      return p.id && p.name ? { id: p.id, name: p.name } : null;
-    })
-    .filter((p): p is { id: string; name: string } => Boolean(p));
+  return compactMap(itemsOf((json.playlists as Record<string, unknown>) ?? {}), (raw) => {
+    const p = raw as { id?: string; name?: string } | null;
+    return p?.id && p.name ? { id: p.id, name: p.name } : null;
+  });
 }
 
 async function resolveLooseTracks(role: Role, tracks: TrackRef[]): Promise<TrackRef[]> {
@@ -333,73 +388,51 @@ async function fillPlaylist(role: Role, list: PlaylistRef): Promise<PlaylistRef>
   };
 }
 
-export async function grabLiveLibrary(role: Role): Promise<LibrarySnapshot> {
+export async function grabLiveLibrary(role: Role): Promise<{ snapshot: LibrarySnapshot; warnings: string[] }> {
   const user = await fetchMe(role);
+  const warnings: string[] = [];
 
   const [liked, albums, shows, episodes, playlists, artists, recentlyPlayed, topTracks] =
     await Promise.all([
-      paginate(role, "/me/tracks?limit=50", (j) =>
-        itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x)),
+      tryCatalog("Liked songs", () => paginate(role, "/me/tracks?limit=50", (j) => compactMap(itemsOf(j), asTrack)), warnings),
+      tryCatalog("Saved albums", () => paginate(role, "/me/albums?limit=50", (j) => compactMap(itemsOf(j), asAlbum)), warnings),
+      tryCatalog("Podcasts", () => paginate(role, "/me/shows?limit=50", (j) => compactMap(itemsOf(j), asShow)), warnings),
+      tryCatalog("Saved episodes", () => paginate(role, "/me/episodes?limit=50", (j) => compactMap(itemsOf(j), asEpisode)), warnings),
+      tryCatalog("Playlists", () => paginate(role, "/me/playlists?limit=50", (j) => itemsOf(j).filter((p) => p != null)), warnings),
+      tryCatalog(
+        "Followed artists",
+        () => paginate(role, "/me/following?type=artist&limit=50", (j) => compactMap(itemsOf(j), asArtist)),
+        warnings,
       ),
-      paginate(role, "/me/albums?limit=50", (j) =>
-        itemsOf(j).map((it) => {
-          const row = it as { album: { id: string; name: string; artists?: { name: string }[] } };
-          return {
-            id: row.album.id,
-            name: row.album.name,
-            artists: (row.album.artists ?? []).map((a) => a.name).join(", "),
-          } satisfies AlbumRef;
-        }),
-      ),
-      paginate(role, "/me/shows?limit=50", (j) =>
-        itemsOf(j).map((it) => {
-          const row = it as { show: { id: string; name: string } };
-          return { id: row.show.id, name: row.show.name } satisfies ShowRef;
-        }),
-      ),
-      paginate(role, "/me/episodes?limit=50", (j) =>
-        itemsOf(j)
-          .map((it) => (it as { episode?: { id: string; name: string } }).episode)
-          .filter((ep): ep is { id: string; name: string } => Boolean(ep))
-          .map((ep) => ({ id: ep.id, name: ep.name }) satisfies EpisodeRef),
-      ),
-      paginate(role, "/me/playlists?limit=50", (j) => itemsOf(j)),
-      paginate(role, "/me/following?type=artist&limit=50", (j) =>
-        itemsOf(j).map((a) => {
-          const row = a as { id: string; name: string };
-          return { id: row.id, name: row.name } satisfies ArtistRef;
-        }),
-      ),
-      (async () => {
+      tryCatalog("Recently played", async () => {
         const res = await spotifyFetch(role, "/me/player/recently-played?limit=50");
         if (!res.ok) return [] as TrackRef[];
         const j = (await res.json()) as Record<string, unknown>;
-        return itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x));
-      })(),
-      (async () => {
+        return compactMap(itemsOf(j), asTrack);
+      }, warnings),
+      tryCatalog("Top tracks", async () => {
         const res = await spotifyFetch(role, "/me/top/tracks?time_range=long_term&limit=50");
         if (!res.ok) return [] as TrackRef[];
         const j = (await res.json()) as Record<string, unknown>;
-        return itemsOf(j)
-          .map((t) => asTrack({ track: t }))
-          .filter((x): x is TrackRef => Boolean(x));
-      })(),
+        return compactMap(itemsOf(j), (t) => asTrack({ track: t }));
+      }, warnings),
     ]);
 
   const detailed: PlaylistRef[] = [];
   for (const raw of playlists) {
+    if (raw == null || typeof raw !== "object") continue;
     const p = raw as {
       id?: string;
       name?: string;
       description?: string;
       public?: boolean;
       collaborative?: boolean;
-      owner?: { id?: string };
+      owner?: { id?: string } | null;
       items?: { total?: number };
       tracks?: { total?: number };
     };
     if (!p.id) continue;
-    const listed = await fillPlaylist(role, {
+    const stub: PlaylistRef = {
       id: p.id,
       name: p.name ?? "Untitled playlist",
       description: p.description ?? "",
@@ -408,20 +441,30 @@ export async function grabLiveLibrary(role: Role): Promise<LibrarySnapshot> {
       owned: p.owner?.id === user.id,
       trackCount: p.items?.total ?? p.tracks?.total ?? 0,
       tracks: [],
-    });
-    detailed.push(listed);
+    };
+    try {
+      detailed.push(await fillPlaylist(role, stub));
+    } catch (err) {
+      warnings.push(
+        `${stub.name} could not be filled: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      detailed.push({ ...stub, trackSource: "hidden" });
+    }
   }
 
   return {
-    user,
-    likedTracks: liked,
-    albums,
-    artists,
-    shows,
-    episodes,
-    playlists: detailed,
-    recentlyPlayed,
-    topTracks,
+    snapshot: {
+      user,
+      likedTracks: liked,
+      albums,
+      artists,
+      shows,
+      episodes,
+      playlists: detailed,
+      recentlyPlayed,
+      topTracks,
+    },
+    warnings,
   };
 }
 
@@ -492,7 +535,8 @@ export function liveWriter(role: Role): Writer {
         res = await spotifyFetch(role, "/me/playlists", { method: "POST", body: body(false) });
       }
       if (!res.ok) await fail("Create playlist failed", res);
-      const json = (await res.json()) as { id: string };
+      const json = (await res.json()) as { id?: string } | null;
+      if (!json?.id) throw new Error("Create playlist failed (empty response).");
       return json.id;
     },
     addTracks: async (playlistId, uris) => {

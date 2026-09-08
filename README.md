@@ -26,8 +26,9 @@ You sign in to Spotify twice — **source** (the account you are leaving), then 
 
 1. Open [the app](https://brinza666.github.io/respotifyfree/).
 2. Connect source, then destination.
-3. Pick catalogs and start the transfer.
-4. Optionally download a `respotify-backup.json`.
+3. Leave **Copy followed playlists as new** on (it is on the connect screen, before the scan).
+4. Pick catalogs and start the transfer.
+5. Optionally download a `respotify-backup.json`.
 
 A **demo transfer** is available if you only want to see the wizard.
 

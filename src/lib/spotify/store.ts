@@ -133,6 +133,10 @@ export const useRespotify = create<Store>((set, get) => ({
       set({ error: "Connect both accounts first." });
       return;
     }
+    if (!source.user?.id || !dest.user?.id) {
+      set({ error: "Reconnect both accounts. Profile did not load." });
+      return;
+    }
     if (source.user.id === dest.user.id) {
       set({
         error: "Source and destination are the same account. On Spotify's screen, tap Not you and sign into the other one.",
@@ -141,13 +145,21 @@ export const useRespotify = create<Store>((set, get) => ({
     }
     set({ busy: true, error: null });
     try {
-      const snapshot =
-        source.mode === "live" ? await grabLiveLibrary("source") : demoSourceLibrary();
+      let snapshot;
+      let warnings: string[] = [];
+      if (source.mode === "live") {
+        const grabbed = await grabLiveLibrary("source");
+        snapshot = grabbed.snapshot;
+        warnings = grabbed.warnings;
+      } else {
+        snapshot = demoSourceLibrary();
+      }
+      const notice = [reconstructSummary(snapshot.playlists), ...warnings].filter(Boolean).join(" ");
       set({
         snapshot,
         step: "select",
         busy: false,
-        notice: reconstructSummary(snapshot.playlists),
+        notice: notice || null,
       });
     } catch (err) {
       set({

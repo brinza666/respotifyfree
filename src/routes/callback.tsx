@@ -49,7 +49,7 @@ function CallbackPage() {
         writeSession(session);
         const user = await fetchLiveUser(parsed.role);
         const other = parsed.role === "source" ? readSession("destination") : readSession("source");
-        if (other && other.user.id === user.id) {
+        if (other?.user?.id && other.user.id === user.id) {
           sessionStorage.removeItem(`respotify.${parsed.role}`);
           throw new Error(
             "That is the same Spotify account. Tap Not you on Spotify's login screen and sign into the other one.",

@@ -162,6 +162,8 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
       {error && <Callout tone="danger">{error}</Callout>}
       {notice && <Callout>{notice}</Callout>}
 
+      <CopyFollowedToggle />
+
       <div className="flex flex-col gap-2">
         <Button block disabled={!source || !dest || busy} onClick={() => void loadSourceLibrary()}>
           {busy ? "Reading library…" : "Continue"}
@@ -245,7 +247,6 @@ function SelectStep() {
   const dest = useRespotify((s) => s.dest);
   const toggleCatalog = useRespotify((s) => s.toggleCatalog);
   const setPrecise = useRespotify((s) => s.setPrecise);
-  const setCopyFollowed = useRespotify((s) => s.setCopyFollowed);
   const startTransfer = useRespotify((s) => s.startTransfer);
   const backFromWizard = useRespotify((s) => s.backFromWizard);
   const notice = useRespotify((s) => s.notice);
@@ -300,21 +301,7 @@ function SelectStep() {
           </span>
         </span>
       </label>
-      <label className="flex items-start gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-        <input
-          type="checkbox"
-          className="mt-0.5 size-5 accent-primary"
-          checked={selection.copyFollowedAsNew}
-          onChange={(e) => setCopyFollowed(e.target.checked)}
-        />
-        <span>
-          <span className="font-medium">Copy followed playlists as new</span>
-          <span className="mt-1 block text-muted">
-            Default is follow-in-place. Turn this on to duplicate the track list instead. Radio /
-            Popular lists rebuild from Spotify search when the original songs are hidden.
-          </span>
-        </span>
-      </label>
+      <CopyFollowedToggle />
       <div className="flex flex-col gap-2">
         <Button block onClick={() => void startTransfer()}>
           Start transfer
@@ -522,6 +509,28 @@ function SetupTab() {
         </label>
       </div>
     </div>
+  );
+}
+
+function CopyFollowedToggle() {
+  const selection = useRespotify((s) => s.selection);
+  const setCopyFollowed = useRespotify((s) => s.setCopyFollowed);
+  return (
+    <label className="flex items-start gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+      <input
+        type="checkbox"
+        className="mt-0.5 size-5 accent-primary"
+        checked={selection.copyFollowedAsNew}
+        onChange={(e) => setCopyFollowed(e.target.checked)}
+      />
+      <span>
+        <span className="font-medium">Copy followed playlists as new</span>
+        <span className="mt-1 block text-muted">
+          On before you scan. Radio / Popular lists rebuild from Spotify search when the original
+          songs are hidden. Uncheck to only follow the original list.
+        </span>
+      </span>
+    </label>
   );
 }
 

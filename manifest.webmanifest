@@ -1,0 +1,17 @@
+{
+  "name": "Respotify",
+  "short_name": "Respotify",
+  "description": "Move a Spotify library from one account to another.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b0e0c",
+  "theme_color": "#0b0e0c",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "Respotify",
   "short_name": "Respotify",
-  "description": "Move a Spotify library from one account to another.",
+  "description": "Move a Spotify library from one account to another. / Перенос библиотеки Spotify.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0b0e0c",

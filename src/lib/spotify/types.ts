@@ -1,5 +1,8 @@
 export type Role = "source" | "destination";
 
+/** PUT /me/library accepts at most 40 URIs per request. */
+export const LIBRARY_CHUNK = 40;
+
 export type SpotifyUser = {
   id: string;
   displayName: string;
@@ -30,6 +33,8 @@ export type PlaylistRef = {
   owned: boolean;
   trackCount: number;
   tracks: TrackRef[];
+  /** How the track list was filled. Omit when Spotify returned the songs. */
+  trackSource?: "search" | "hidden";
 };
 
 export type LibrarySnapshot = {

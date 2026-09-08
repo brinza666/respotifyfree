@@ -1,5 +1,13 @@
 import { refreshAccessToken } from "./pkce";
+import {
+  isMadeForYou,
+  parseArtistStation,
+  pickPlaylistMatch,
+  pickTrackMatch,
+  trackSearchQuery,
+} from "./reconstruct";
 import { readSession, writeSession } from "./session";
+import type { Writer } from "./transfer";
 import type {
   AlbumRef,
   ArtistRef,
@@ -12,7 +20,6 @@ import type {
   SpotifyUser,
   TrackRef,
 } from "./types";
-import type { Writer } from "./transfer";
 
 const API = "https://api.spotify.com/v1";
 
@@ -63,6 +70,75 @@ export async function spotifyFetch(
   return res;
 }
 
+async function errorText(res: Response): Promise<string> {
+  const raw = await res.text();
+  try {
+    const json = JSON.parse(raw) as {
+      error?: { message?: string; reason?: string } | string;
+      error_description?: string;
+      message?: string;
+    };
+    const nested = typeof json.error === "object" && json.error ? json.error : null;
+    const message =
+      nested?.message ||
+      json.error_description ||
+      json.message ||
+      (typeof json.error === "string" ? json.error : "") ||
+      raw.slice(0, 180);
+    const reason = nested?.reason ? ` ${nested.reason}` : "";
+    return `${message}${reason}`.trim() || String(res.status);
+  } catch {
+    return raw.slice(0, 180) || String(res.status);
+  }
+}
+
+function explainStatus(status: number, detail: string): string {
+  if (status === 403 && /not registered|allowlist|whitelist/i.test(detail)) {
+    return "Spotify blocked this account. Dashboard → Users Management → add that Spotify email.";
+  }
+  if (status === 403) {
+    return `Spotify 403${detail ? `: ${detail}` : ""}. Dest account must be on the app allowlist (Users Management).`;
+  }
+  return `Spotify ${status}${detail ? `: ${detail}` : ""}`;
+}
+
+async function fail(label: string, res: Response): Promise<never> {
+  throw new Error(`${label} (${explainStatus(res.status, await errorText(res))})`);
+}
+
+async function send(
+  role: Role,
+  primary: string,
+  init: RequestInit,
+  fallback?: { path: string; init?: RequestInit },
+): Promise<Response> {
+  const first = await spotifyFetch(role, primary, init);
+  if (first.ok) return first;
+  if (fallback && (first.status === 404 || first.status === 405)) {
+    const second = await spotifyFetch(role, fallback.path, fallback.init ?? init);
+    if (second.ok) return second;
+    return second;
+  }
+  return first;
+}
+
+function libraryUris(kind: "track" | "album" | "show" | "episode" | "artist" | "playlist", ids: string[]) {
+  return ids.filter(Boolean).map((id) => `spotify:${kind}:${id}`);
+}
+
+async function saveLibrary(role: Role, uris: string[], legacy: () => Promise<Response>, label: string) {
+  if (uris.length === 0) return;
+  const qs = uris.map(encodeURIComponent).join(",");
+  const res = await spotifyFetch(role, `/me/library?uris=${qs}`, { method: "PUT" });
+  if (res.ok) return;
+  if (res.status === 404 || res.status === 405) {
+    const old = await legacy();
+    if (old.ok) return;
+    await fail(label, old);
+  }
+  await fail(label, res);
+}
+
 async function fetchMe(role: Role): Promise<SpotifyUser> {
   const res = await spotifyFetch(role, "/me");
   if (!res.ok) throw new Error("Could not read the Spotify profile.");
@@ -108,14 +184,15 @@ async function paginate<T>(
 }
 
 async function playlistTracks(role: Role, playlistId: string): Promise<TrackRef[]> {
-  // Some library playlists (Made For You, local files, region-locked) return 403
-  // on /tracks. Skip them so one playlist cannot abort the whole sync.
-  return paginate(
-    role,
-    `/playlists/${playlistId}/tracks?limit=100&market=from_token`,
-    (j) => itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x)),
-    { skipStatuses: [403, 404] },
-  );
+  const pick = (j: Record<string, unknown>) =>
+    itemsOf(j).map(asTrack).filter((x): x is TrackRef => Boolean(x));
+  const modern = await paginate(role, `/playlists/${playlistId}/items?limit=50&market=from_token`, pick, {
+    skipStatuses: [403, 404],
+  });
+  if (modern.length) return modern;
+  return paginate(role, `/playlists/${playlistId}/tracks?limit=50&market=from_token`, pick, {
+    skipStatuses: [403, 404],
+  });
 }
 
 function asTrack(item: unknown): TrackRef | null {
@@ -125,15 +202,28 @@ function asTrack(item: unknown): TrackRef | null {
     added_at?: string;
     played_at?: string;
   } & TrackLike;
-  const track = row.track ?? row.item ?? row;
-  if (!track?.id || !track.uri?.startsWith("spotify:track:")) return null;
-  return {
-    id: track.id,
-    uri: track.uri,
-    name: track.name ?? "Untitled",
-    artists: (track.artists ?? []).map((a) => a.name).join(", "),
-    addedAt: row.added_at ?? row.played_at,
-  };
+  const track = row.item ?? row.track ?? row;
+  const name = track?.name ?? "";
+  const artists = (track?.artists ?? []).map((a) => a.name).join(", ");
+  if (track?.id && track.uri?.startsWith("spotify:track:")) {
+    return {
+      id: track.id,
+      uri: track.uri,
+      name: name || "Untitled",
+      artists,
+      addedAt: row.added_at ?? row.played_at,
+    };
+  }
+  if (name) {
+    return {
+      id: track?.id ?? "",
+      uri: track?.uri ?? "",
+      name,
+      artists,
+      addedAt: row.added_at ?? row.played_at,
+    };
+  }
+  return null;
 }
 
 type TrackLike = {
@@ -143,12 +233,104 @@ type TrackLike = {
   artists?: { name: string }[];
 };
 
-
 function itemsOf(json: Record<string, unknown>): unknown[] {
   if (Array.isArray(json.items)) return json.items;
   const artists = json.artists as { items?: unknown[] } | undefined;
   if (Array.isArray(artists?.items)) return artists.items;
+  const tracks = json.tracks as { items?: unknown[] } | undefined;
+  if (Array.isArray(tracks?.items)) return tracks.items;
   return [];
+}
+
+async function searchTracks(role: Role, q: string, pages = 5): Promise<TrackRef[]> {
+  if (!q) return [];
+  const out: TrackRef[] = [];
+  const seen = new Set<string>();
+  for (let page = 0; page < pages; page++) {
+    const res = await spotifyFetch(
+      role,
+      `/search?q=${encodeURIComponent(q)}&type=track&limit=10&market=from_token&offset=${page * 10}`,
+    );
+    if (!res.ok) break;
+    const json = (await res.json()) as Record<string, unknown>;
+    const batch = itemsOf((json.tracks as Record<string, unknown>) ?? {}).map(asTrack);
+    for (const track of batch) {
+      if (!track?.id || seen.has(track.id)) continue;
+      seen.add(track.id);
+      out.push(track);
+    }
+    if (batch.length < 10) break;
+    await sleep(80);
+  }
+  return out;
+}
+
+async function searchPlaylists(role: Role, q: string): Promise<{ id: string; name: string }[]> {
+  const res = await spotifyFetch(
+    role,
+    `/search?q=${encodeURIComponent(q)}&type=playlist&limit=10&market=from_token`,
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as Record<string, unknown>;
+  return itemsOf((json.playlists as Record<string, unknown>) ?? {})
+    .map((raw) => {
+      const p = raw as { id?: string; name?: string };
+      return p.id && p.name ? { id: p.id, name: p.name } : null;
+    })
+    .filter((p): p is { id: string; name: string } => Boolean(p));
+}
+
+async function resolveLooseTracks(role: Role, tracks: TrackRef[]): Promise<TrackRef[]> {
+  const out: TrackRef[] = [];
+  const seen = new Set<string>();
+  for (const track of tracks) {
+    if (track.id && track.uri.startsWith("spotify:track:")) {
+      if (!seen.has(track.id)) {
+        seen.add(track.id);
+        out.push(track);
+      }
+      continue;
+    }
+    const hits = await searchTracks(role, trackSearchQuery(track), 1);
+    const pick = pickTrackMatch(track, hits);
+    if (pick && !seen.has(pick.id)) {
+      seen.add(pick.id);
+      out.push(pick);
+    }
+    await sleep(80);
+  }
+  return out;
+}
+
+async function fillPlaylist(role: Role, list: PlaylistRef): Promise<PlaylistRef> {
+  let tracks = await playlistTracks(role, list.id);
+  let trackSource = list.trackSource;
+
+  if (tracks.length === 0 && isMadeForYou(list.name)) {
+    return { ...list, tracks: [], trackCount: 0, trackSource: "hidden" };
+  }
+
+  if (tracks.length === 0) {
+    const station = parseArtistStation(list.name);
+    if (station) {
+      tracks = await searchTracks(role, `artist:"${station.artist}"`);
+      if (tracks.length) trackSource = "search";
+    } else if (!list.owned) {
+      const match = pickPlaylistMatch(list.name, await searchPlaylists(role, list.name));
+      if (match && match.id !== list.id) {
+        tracks = await playlistTracks(role, match.id);
+        if (tracks.length) trackSource = "search";
+      }
+    }
+  }
+
+  const resolved = await resolveLooseTracks(role, tracks);
+  return {
+    ...list,
+    tracks: resolved,
+    trackCount: resolved.length,
+    trackSource: resolved.length === 0 && !list.owned ? trackSource ?? "hidden" : trackSource,
+  };
 }
 
 export async function grabLiveLibrary(role: Role): Promise<LibrarySnapshot> {
@@ -213,19 +395,21 @@ export async function grabLiveLibrary(role: Role): Promise<LibrarySnapshot> {
       public?: boolean;
       collaborative?: boolean;
       owner?: { id?: string };
+      items?: { total?: number };
+      tracks?: { total?: number };
     };
     if (!p.id) continue;
-    const tracks = await playlistTracks(role, p.id);
-    detailed.push({
+    const listed = await fillPlaylist(role, {
       id: p.id,
       name: p.name ?? "Untitled playlist",
       description: p.description ?? "",
       public: Boolean(p.public),
       collaborative: Boolean(p.collaborative),
       owned: p.owner?.id === user.id,
-      trackCount: tracks.length,
-      tracks,
+      trackCount: p.items?.total ?? p.tracks?.total ?? 0,
+      tracks: [],
     });
+    detailed.push(listed);
   }
 
   return {
@@ -245,58 +429,104 @@ export function liveWriter(role: Role): Writer {
   return {
     delay: sleep,
     saveTracks: async (ids) => {
-      if (ids.length === 0) return;
-      const res = await spotifyFetch(role, `/me/tracks?ids=${ids.join(",")}`, { method: "PUT" });
-      if (!res.ok && res.status !== 200) throw new Error(`Save tracks failed (${res.status})`);
+      await saveLibrary(
+        role,
+        libraryUris("track", ids),
+        () => spotifyFetch(role, `/me/tracks?ids=${ids.join(",")}`, { method: "PUT" }),
+        "Save tracks failed",
+      );
     },
     saveAlbums: async (ids) => {
-      if (ids.length === 0) return;
-      const res = await spotifyFetch(role, `/me/albums?ids=${ids.join(",")}`, { method: "PUT" });
-      if (!res.ok) throw new Error(`Save albums failed (${res.status})`);
+      await saveLibrary(
+        role,
+        libraryUris("album", ids),
+        () => spotifyFetch(role, `/me/albums?ids=${ids.join(",")}`, { method: "PUT" }),
+        "Save albums failed",
+      );
     },
     saveShows: async (ids) => {
-      if (ids.length === 0) return;
-      const res = await spotifyFetch(role, `/me/shows?ids=${ids.join(",")}`, { method: "PUT" });
-      if (!res.ok) throw new Error(`Save shows failed (${res.status})`);
+      await saveLibrary(
+        role,
+        libraryUris("show", ids),
+        () => spotifyFetch(role, `/me/shows?ids=${ids.join(",")}`, { method: "PUT" }),
+        "Save shows failed",
+      );
     },
     saveEpisodes: async (ids) => {
-      if (ids.length === 0) return;
-      const res = await spotifyFetch(role, `/me/episodes?ids=${ids.join(",")}`, { method: "PUT" });
-      if (!res.ok) throw new Error(`Save episodes failed (${res.status})`);
+      await saveLibrary(
+        role,
+        libraryUris("episode", ids),
+        () => spotifyFetch(role, `/me/episodes?ids=${ids.join(",")}`, { method: "PUT" }),
+        "Save episodes failed",
+      );
     },
     followArtists: async (ids) => {
-      if (ids.length === 0) return;
-      const res = await spotifyFetch(role, `/me/following?type=artist&ids=${ids.join(",")}`, {
-        method: "PUT",
-      });
-      if (!res.ok) throw new Error(`Follow artists failed (${res.status})`);
+      await saveLibrary(
+        role,
+        libraryUris("artist", ids),
+        () =>
+          spotifyFetch(role, `/me/following?type=artist&ids=${ids.join(",")}`, { method: "PUT" }),
+        "Follow artists failed",
+      );
     },
     followPlaylist: async (id) => {
-      const res = await spotifyFetch(role, `/playlists/${id}/followers`, { method: "PUT" });
-      if (!res.ok) throw new Error(`Follow playlist failed (${res.status})`);
+      await saveLibrary(
+        role,
+        libraryUris("playlist", [id]),
+        () => spotifyFetch(role, `/playlists/${id}/followers`, { method: "PUT" }),
+        "Follow playlist failed",
+      );
     },
-    createPlaylist: async (userId, playlist) => {
-      const res = await spotifyFetch(role, `/users/${encodeURIComponent(userId)}/playlists`, {
-        method: "POST",
-        body: JSON.stringify({
+    createPlaylist: async (_userId, playlist) => {
+      const body = (isPublic: boolean) =>
+        JSON.stringify({
           name: playlist.name,
           description: playlist.description?.slice(0, 300) ?? "",
-          public: playlist.public,
-        }),
+          public: isPublic,
+        });
+      let res = await send(role, "/me/playlists", { method: "POST", body: body(Boolean(playlist.public)) }, {
+        path: `/users/${encodeURIComponent(_userId)}/playlists`,
+        init: { method: "POST", body: body(Boolean(playlist.public)) },
       });
-      if (!res.ok) throw new Error(`Create playlist failed (${res.status})`);
+      if (!res.ok && res.status === 403 && playlist.public) {
+        res = await spotifyFetch(role, "/me/playlists", { method: "POST", body: body(false) });
+      }
+      if (!res.ok) await fail("Create playlist failed", res);
       const json = (await res.json()) as { id: string };
       return json.id;
     },
     addTracks: async (playlistId, uris) => {
       if (uris.length === 0) return;
-      const res = await spotifyFetch(role, `/playlists/${playlistId}/tracks`, {
-        method: "POST",
-        body: JSON.stringify({ uris }),
-      });
-      if (!res.ok) throw new Error(`Add tracks failed (${res.status})`);
+      const res = await send(
+        role,
+        `/playlists/${playlistId}/items`,
+        { method: "POST", body: JSON.stringify({ uris }) },
+        {
+          path: `/playlists/${playlistId}/tracks`,
+          init: { method: "POST", body: JSON.stringify({ uris }) },
+        },
+      );
+      if (!res.ok) await fail("Add tracks failed", res);
     },
   };
+}
+
+export function reconstructSummary(playlists: PlaylistRef[]): string | null {
+  const search = playlists.filter((p) => p.trackSource === "search").length;
+  const hidden = playlists.filter((p) => p.trackSource === "hidden").length;
+  if (!search && !hidden) return null;
+  const bits: string[] = [];
+  if (search) {
+    bits.push(
+      `${search} playlist${search === 1 ? "" : "s"} rebuilt from Spotify search (Radio / Popular / public match)`,
+    );
+  }
+  if (hidden) {
+    bits.push(
+      `${hidden} Made For You or locked list${hidden === 1 ? "" : "s"} have hidden tracks and cannot copy`,
+    );
+  }
+  return bits.join(". ") + ".";
 }
 
 export { fetchMe as fetchLiveUser };

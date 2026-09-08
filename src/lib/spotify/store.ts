@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { backupToSnapshot, parseBackup, parseSpotifyHistoryExport, snapshotToBackup } from "./backup";
 import { demoDestUser, demoSourceLibrary, demoWriter } from "./demo";
-import { grabLiveLibrary, liveWriter } from "./live";
+import { grabLiveLibrary, liveWriter, reconstructSummary } from "./live";
 import { clientId, redirectUri, seedClientId, setClientId, startLogin } from "./pkce";
 import { clearSession, readSession, writeSession } from "./session";
 import { countsFor, runTransfer } from "./transfer";
@@ -143,7 +143,12 @@ export const useRespotify = create<Store>((set, get) => ({
     try {
       const snapshot =
         source.mode === "live" ? await grabLiveLibrary("source") : demoSourceLibrary();
-      set({ snapshot, step: "select", busy: false });
+      set({
+        snapshot,
+        step: "select",
+        busy: false,
+        notice: reconstructSummary(snapshot.playlists),
+      });
     } catch (err) {
       set({
         busy: false,

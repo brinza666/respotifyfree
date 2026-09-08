@@ -18,6 +18,8 @@ You sign in to Spotify twice — **source** (the account you are leaving), then 
 | Podcast subscriptions | Yes |
 | Saved episodes | Yes |
 | Recently played | Saved as a playlist archive |
+| Radio / Popular (hidden by Spotify) | Rebuilt from search when songs can be found |
+| Daily Mix / Discover Weekly / Made For You | No — Spotify hides those tracks |
 | Listening history / Wrapped / algorithm / followers | No — Spotify has no write API |
 
 ## How to use

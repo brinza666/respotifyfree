@@ -248,6 +248,7 @@ function SelectStep() {
   const setCopyFollowed = useRespotify((s) => s.setCopyFollowed);
   const startTransfer = useRespotify((s) => s.startTransfer);
   const backFromWizard = useRespotify((s) => s.backFromWizard);
+  const notice = useRespotify((s) => s.notice);
   const counts = useMemo(() => (snapshot ? countsFor(snapshot) : null), [snapshot]);
 
   if (!snapshot || !counts) return null;
@@ -260,6 +261,7 @@ function SelectStep() {
           From {snapshot.user.displayName} to {dest?.user.displayName}. Uncheck anything you want to
           leave behind.
         </p>
+        {notice ? <div className="mt-3"><Callout>{notice}</Callout></div> : null}
       </div>
       <ul className="flex flex-col gap-2">
         {(Object.keys(CATALOG_LABELS) as CatalogKey[]).map((key) => (
@@ -308,7 +310,8 @@ function SelectStep() {
         <span>
           <span className="font-medium">Copy followed playlists as new</span>
           <span className="mt-1 block text-muted">
-            Default is follow-in-place. Turn this on to duplicate the track list instead.
+            Default is follow-in-place. Turn this on to duplicate the track list instead. Radio /
+            Popular lists rebuild from Spotify search when the original songs are hidden.
           </span>
         </span>
       </label>
@@ -504,7 +507,8 @@ function SetupTab() {
         <p className="text-sm font-medium">Live Spotify</p>
         <p className="text-sm text-muted">
           Create an app in the Spotify Developer Dashboard, add this Redirect URI, then paste the
-          Client ID.
+          Client ID. Add both Spotify emails under Users Management (development mode, max 5). The
+          dashboard owner needs Premium.
         </p>
         <CopyField value={redirectUri} />
         <label className="flex flex-col gap-1.5 text-sm">
@@ -530,7 +534,9 @@ function Honesty() {
           <p className="font-medium">What this can and cannot copy</p>
           <p className="mt-1 text-muted">
             Playlists, liked songs, albums, artists, podcasts, and episodes copy through Spotify’s
-            official API. Listening history, Wrapped, followers, and the taste algorithm cannot be
+            official API. Radio / Popular lists that Spotify will not return are rebuilt from search
+            (songs Spotify can find). Daily Mix, Discover Weekly, and similar Made For You lists
+            stay hidden. Listening history, Wrapped, followers, and the taste algorithm cannot be
             written to another account. Recently played is saved as a playlist archive.
           </p>
         </div>

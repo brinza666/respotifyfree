@@ -1,12 +1,13 @@
-import type {
-  CatalogKey,
-  LibrarySnapshot,
-  PlaylistRef,
-  ProgressEvent,
-  SpotifyUser,
-  TrackRef,
-  TransferReport,
-  TransferSelection,
+import {
+  LIBRARY_CHUNK,
+  type CatalogKey,
+  type LibrarySnapshot,
+  type PlaylistRef,
+  type ProgressEvent,
+  type SpotifyUser,
+  type TrackRef,
+  type TransferReport,
+  type TransferSelection,
 } from "./types";
 
 export type Writer = {
@@ -62,7 +63,7 @@ export async function runTransfer(opts: {
         const ordered = selection.preciseLikes
           ? [...tracks].sort((a, b) => String(a.addedAt).localeCompare(String(b.addedAt)))
           : [...tracks].reverse();
-        const size = selection.preciseLikes ? 5 : 50;
+        const size = selection.preciseLikes ? 5 : LIBRARY_CHUNK;
         const batches = chunk(ordered, size);
         let done = 0;
         for (const batch of batches) {
@@ -93,7 +94,7 @@ export async function runTransfer(opts: {
       run: async () => {
         const albums = source.albums;
         let done = 0;
-        for (const batch of chunk(albums, 50)) {
+        for (const batch of chunk(albums, LIBRARY_CHUNK)) {
           throwIfAborted(signal);
           emit({ catalog: "Saved albums", done, total: albums.length, currentName: batch[0]?.name });
           try {
@@ -121,9 +122,13 @@ export async function runTransfer(opts: {
             currentName: list.name,
           });
           try {
-            const destId = await writer.createPlaylist(destUser.id, list);
-            playlistMap[list.id] = destId;
             const uris = list.tracks.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
+            if (uris.length === 0 && list.trackSource === "hidden") {
+              fail(list.name, new Error("Spotify hid this list. Cannot copy Daily Mix / similar."));
+              continue;
+            }
+            const destId = await writer.createPlaylist(destUser.id, { ...list, public: false });
+            playlistMap[list.id] = destId;
             for (const batch of chunk(uris, 100)) {
               await writer.addTracks(destId, batch);
               await writer.delay(80);
@@ -150,13 +155,23 @@ export async function runTransfer(opts: {
             currentName: list.name,
           });
           try {
-            if (selection.copyFollowedAsNew) {
-              const destId = await writer.createPlaylist(destUser.id, { ...list, owned: true });
+            const uris = list.tracks.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
+            if (selection.copyFollowedAsNew && uris.length > 0) {
+              const destId = await writer.createPlaylist(destUser.id, { ...list, owned: true, public: false });
               playlistMap[list.id] = destId;
-              const uris = list.tracks.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
               for (const batch of chunk(uris, 100)) await writer.addTracks(destId, batch);
             } else {
               await writer.followPlaylist(list.id);
+              if (selection.copyFollowedAsNew && uris.length === 0) {
+                fail(
+                  list.name,
+                  new Error(
+                    list.trackSource === "hidden"
+                      ? "Spotify hid this list. Followed the original instead."
+                      : "No tracks to copy. Followed the original instead.",
+                  ),
+                );
+              }
             }
             n += 1;
           } catch (err) {
@@ -172,7 +187,7 @@ export async function runTransfer(opts: {
       run: async () => {
         const artists = source.artists;
         let done = 0;
-        for (const batch of chunk(artists, 50)) {
+        for (const batch of chunk(artists, LIBRARY_CHUNK)) {
           throwIfAborted(signal);
           emit({ catalog: "Followed artists", done, total: artists.length, currentName: batch[0]?.name });
           try {
@@ -191,7 +206,7 @@ export async function runTransfer(opts: {
       run: async () => {
         const shows = source.shows;
         let done = 0;
-        for (const batch of chunk(shows, 50)) {
+        for (const batch of chunk(shows, LIBRARY_CHUNK)) {
           throwIfAborted(signal);
           emit({ catalog: "Podcasts", done, total: shows.length, currentName: batch[0]?.name });
           try {
@@ -210,7 +225,7 @@ export async function runTransfer(opts: {
       run: async () => {
         const episodes = source.episodes;
         let done = 0;
-        for (const batch of chunk(episodes, 50)) {
+        for (const batch of chunk(episodes, LIBRARY_CHUNK)) {
           throwIfAborted(signal);
           emit({ catalog: "Saved episodes", done, total: episodes.length, currentName: batch[0]?.name });
           try {

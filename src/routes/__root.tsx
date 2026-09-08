@@ -12,7 +12,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Move playlists, liked songs, albums, artists, and podcasts from one Spotify account to another.",
+          "Move playlists, liked songs, albums, artists, and podcasts from one Spotify account to another. / Перенос плейлистов, любимых треков, альбомов, исполнителей и подкастов Spotify.",
       },
       { name: "theme-color", content: "#0b0e0c" },
       { name: "mobile-web-app-capable", content: "yes" },

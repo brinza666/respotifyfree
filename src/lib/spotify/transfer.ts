@@ -131,6 +131,13 @@ export async function runTransfer(opts: {
             const destId = await writer.createPlaylist(destUser.id, { ...list, public: false });
             playlistMap[list.id] = destId;
             for (const batch of chunk(uris, 100)) {
+              emit({
+                catalog: "Owned playlists",
+                done: copiedCount,
+                total: lists.length,
+                currentName: list.name,
+                currentTrack: list.tracks.find((t) => t.uri === batch[0])?.name,
+              });
               await writer.addTracks(destId, batch);
               await writer.delay(80);
             }
@@ -164,7 +171,16 @@ export async function runTransfer(opts: {
             if (selection.copyFollowedAsNew && uris.length > 0) {
               const destId = await writer.createPlaylist(destUser.id, { ...list, owned: true, public: false });
               playlistMap[list.id] = destId;
-              for (const batch of chunk(uris, 100)) await writer.addTracks(destId, batch);
+              for (const batch of chunk(uris, 100)) {
+                emit({
+                  catalog: "Followed playlists",
+                  done: n,
+                  total: lists.length,
+                  currentName: list.name,
+                  currentTrack: list.tracks.find((t) => t.uri === batch[0])?.name,
+                });
+                await writer.addTracks(destId, batch);
+              }
             } else {
               try {
                 await writer.followPlaylist(list.id);

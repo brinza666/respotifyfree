@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Respotify</string>
+    <string name="engine_url">https://brinza666.github.io/respotifyfree/</string>
+    <string name="engine_hint">Respotify открывает веб-приложение. Вход в Spotify идёт через Chrome, не через это окно.</string>
+    <string name="open">Открыть Respotify</string>
+</resources>

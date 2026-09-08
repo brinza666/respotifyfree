@@ -1,13 +1,16 @@
 import { create } from "zustand";
 import { backupToSnapshot, parseBackup, parseSpotifyHistoryExport, snapshotToBackup } from "./backup";
 import { demoDestUser, demoSourceLibrary, demoWriter } from "./demo";
-import { grabLiveLibrary, liveWriter, reconstructSummary } from "./live";
+import { detectLocale, format, type Locale } from "../i18n";
+import { grabLiveLibrary, liveWriter } from "./live";
 import { clientId, redirectUri, seedClientId, setClientId, startLogin } from "./pkce";
 import { clearSession, readSession, writeSession } from "./session";
 import { countsFor, runTransfer } from "./transfer";
 import {
   CATALOG_LABELS,
+  DEFAULT_PREFS,
   DEFAULT_SELECTION,
+  type AppPrefs,
   type CatalogKey,
   type LibrarySnapshot,
   type ProgressEvent,
@@ -32,7 +35,13 @@ type Store = {
   error: string | null;
   notice: string | null;
   busy: boolean;
+  locale: Locale;
+  showTrackNames: boolean;
+  showMoreInfo: boolean;
   hydrate: () => void;
+  setLocale: (locale: Locale) => void;
+  setShowTrackNames: (value: boolean) => void;
+  setShowMoreInfo: (value: boolean) => void;
   setClientIdValue: (id: string) => void;
   connectDemo: (role: "source" | "destination") => void;
   connectLive: (role: "source" | "destination") => Promise<void>;
@@ -50,8 +59,45 @@ type Store = {
   abort?: AbortController;
 };
 
+const PREFS_KEY = "respotify.prefs";
+
+function readPrefs(): AppPrefs {
+  if (typeof window === "undefined") return { ...DEFAULT_PREFS };
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return { ...DEFAULT_PREFS, locale: detectLocale() };
+    const parsed = JSON.parse(raw) as Partial<AppPrefs>;
+    return {
+      locale: parsed.locale === "ru" || parsed.locale === "en" ? parsed.locale : detectLocale(),
+      showTrackNames: parsed.showTrackNames !== false,
+      showMoreInfo: Boolean(parsed.showMoreInfo),
+    };
+  } catch {
+    return { ...DEFAULT_PREFS, locale: detectLocale() };
+  }
+}
+
+function writePrefs(prefs: AppPrefs) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+}
+
 function emptyProgress(): ProgressEvent {
   return { catalog: "Preparing", done: 0, total: 1, errors: [] };
+}
+
+function reconstructNotice(locale: Locale, playlists: LibrarySnapshot["playlists"]): string | null {
+  const search = playlists.filter((p) => p.trackSource === "search").length;
+  const hidden = playlists.filter((p) => p.trackSource === "hidden").length;
+  if (!search && !hidden) return null;
+  const bits: string[] = [];
+  if (search) {
+    bits.push(format(locale, search === 1 ? "reconstructSearch" : "reconstructSearchPlural", { n: search }));
+  }
+  if (hidden) {
+    bits.push(format(locale, hidden === 1 ? "reconstructHidden" : "reconstructHiddenPlural", { n: hidden }));
+  }
+  return bits.join(" ");
 }
 
 export const useRespotify = create<Store>((set, get) => ({
@@ -68,19 +114,54 @@ export const useRespotify = create<Store>((set, get) => ({
   error: null,
   notice: null,
   busy: false,
+  locale: DEFAULT_PREFS.locale,
+  showTrackNames: DEFAULT_PREFS.showTrackNames,
+  showMoreInfo: DEFAULT_PREFS.showMoreInfo,
 
   hydrate: () => {
     if (typeof window === "undefined") return;
     seedClientId();
     const source = readSession("source");
     const dest = readSession("destination");
+    const prefs = readPrefs();
+    const selection = structuredClone(DEFAULT_SELECTION);
+    try {
+      const raw = localStorage.getItem("respotify.selection");
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<TransferSelection>;
+        if (typeof saved.copyFollowedAsNew === "boolean") selection.copyFollowedAsNew = saved.copyFollowedAsNew;
+        if (typeof saved.preciseLikes === "boolean") selection.preciseLikes = saved.preciseLikes;
+      }
+    } catch {
+      /* keep defaults */
+    }
     set({
       hydrated: true,
       source,
       dest,
       clientId: clientId(),
       redirectUri: redirectUri(),
+      locale: prefs.locale,
+      showTrackNames: prefs.showTrackNames,
+      showMoreInfo: prefs.showMoreInfo,
+      selection,
     });
+    document.documentElement.lang = prefs.locale;
+  },
+
+  setLocale: (locale) => {
+    const prefs = { ...readPrefs(), locale };
+    writePrefs(prefs);
+    set({ locale });
+    if (typeof document !== "undefined") document.documentElement.lang = locale;
+  },
+  setShowTrackNames: (showTrackNames) => {
+    writePrefs({ ...readPrefs(), showTrackNames });
+    set({ showTrackNames });
+  },
+  setShowMoreInfo: (showMoreInfo) => {
+    writePrefs({ ...readPrefs(), showMoreInfo });
+    set({ showMoreInfo });
   },
 
   setClientIdValue: (id) => {
@@ -92,7 +173,11 @@ export const useRespotify = create<Store>((set, get) => ({
     const user = role === "source" ? demoSourceLibrary().user : demoDestUser();
     const session: Session = { role, mode: "demo", user };
     writeSession(session);
-    set({ [role === "source" ? "source" : "dest"]: session, error: null, notice: "Demo account connected." });
+    set({
+      [role === "source" ? "source" : "dest"]: session,
+      error: null,
+      notice: format(get().locale, "demoConnected"),
+    });
   },
 
   connectLive: async (role) => {
@@ -123,23 +208,23 @@ export const useRespotify = create<Store>((set, get) => ({
       snapshot,
       step: "select",
       error: null,
-      notice: "Demo library loaded. Nothing is written to a real Spotify account.",
+      notice: format(get().locale, "demoLoaded"),
     });
   },
 
   loadSourceLibrary: async () => {
     const { source, dest } = get();
     if (!source || !dest) {
-      set({ error: "Connect both accounts first." });
+      set({ error: format(get().locale, "connectBoth") });
       return;
     }
     if (!source.user?.id || !dest.user?.id) {
-      set({ error: "Reconnect both accounts. Profile did not load." });
+      set({ error: format(get().locale, "reconnect") });
       return;
     }
     if (source.user.id === dest.user.id) {
       set({
-        error: "Source and destination are the same account. On Spotify's screen, tap Not you and sign into the other one.",
+        error: format(get().locale, "sameAccount"),
       });
       return;
     }
@@ -154,7 +239,9 @@ export const useRespotify = create<Store>((set, get) => ({
       } else {
         snapshot = demoSourceLibrary();
       }
-      const notice = [reconstructSummary(snapshot.playlists), ...warnings].filter(Boolean).join(" ");
+      const notice = [reconstructNotice(get().locale, snapshot.playlists), ...warnings]
+        .filter(Boolean)
+        .join(" ");
       set({
         snapshot,
         step: "select",
@@ -164,7 +251,7 @@ export const useRespotify = create<Store>((set, get) => ({
     } catch (err) {
       set({
         busy: false,
-        error: err instanceof Error ? err.message : "Could not read the source library.",
+        error: err instanceof Error ? err.message : format(get().locale, "readFail"),
       });
     }
   },
@@ -175,8 +262,32 @@ export const useRespotify = create<Store>((set, get) => ({
     set({ selection });
   },
 
-  setPrecise: (value) => set({ selection: { ...get().selection, preciseLikes: value } }),
-  setCopyFollowed: (value) => set({ selection: { ...get().selection, copyFollowedAsNew: value } }),
+  setPrecise: (value) => {
+    const selection = { ...get().selection, preciseLikes: value };
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "respotify.selection",
+        JSON.stringify({
+          copyFollowedAsNew: selection.copyFollowedAsNew,
+          preciseLikes: selection.preciseLikes,
+        }),
+      );
+    }
+    set({ selection });
+  },
+  setCopyFollowed: (value) => {
+    const selection = { ...get().selection, copyFollowedAsNew: value };
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "respotify.selection",
+        JSON.stringify({
+          copyFollowedAsNew: selection.copyFollowedAsNew,
+          preciseLikes: selection.preciseLikes,
+        }),
+      );
+    }
+    set({ selection });
+  },
 
   startTransfer: async () => {
     const { snapshot, dest, selection, source } = get();
@@ -196,12 +307,12 @@ export const useRespotify = create<Store>((set, get) => ({
       set({ report, step: "done", busy: false, abort: undefined });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        set({ busy: false, notice: "Transfer paused.", abort: undefined });
+        set({ busy: false, notice: format(get().locale, "paused"), abort: undefined });
         return;
       }
       set({
         busy: false,
-        error: err instanceof Error ? err.message : "Transfer failed.",
+        error: err instanceof Error ? err.message : format(get().locale, "transferFail"),
         abort: undefined,
       });
     }
@@ -251,7 +362,7 @@ export const useRespotify = create<Store>((set, get) => ({
           source,
           snapshot,
           step: get().dest ? "select" : "home",
-          notice: `Loaded backup from ${snapshot.user.displayName}. Connect a destination to restore.`,
+          notice: format(get().locale, "loadedBackup", { name: snapshot.user.displayName }),
           error: null,
         });
         return;
@@ -305,12 +416,12 @@ export const useRespotify = create<Store>((set, get) => ({
           },
         },
         step: get().dest ? "select" : "home",
-        notice: `Found ${history.count} unique tracks in the export. Connect a destination to save them as a playlist.`,
+        notice: format(get().locale, "historyFound", { n: history.count }),
         error: null,
       });
     } catch (err) {
       set({
-        error: err instanceof Error ? err.message : "Could not read that file.",
+        error: err instanceof Error ? err.message : format(get().locale, "fileFail"),
       });
     }
   },

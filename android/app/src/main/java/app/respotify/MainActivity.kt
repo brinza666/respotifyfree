@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(pad, pad * 2, pad, pad)
         }
         val title = TextView(this).apply {
-            text = "Respotify"
+            text = getString(R.string.app_name)
             textSize = 28f
             setTextColor(0xFFE9EEE9.toInt())
         }

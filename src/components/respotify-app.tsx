@@ -13,12 +13,18 @@ import {
   Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { catalogLabel, failedLabel, format, RELEASES_URL, REPO_URL, type MessageKey } from "@/lib/i18n";
 import { downloadBackup } from "@/lib/spotify/backup";
-import { CATALOG_LABELS, countsFor, snapshotToBackup, useRespotify } from "@/lib/spotify/store";
+import { countsFor, snapshotToBackup, useRespotify } from "@/lib/spotify/store";
 import type { CatalogKey, Session } from "@/lib/spotify/types";
 import { cn } from "@/lib/utils";
 
 type Tab = "transfer" | "backup" | "setup";
+
+function useT() {
+  const locale = useRespotify((s) => s.locale);
+  return (key: MessageKey, vars?: Record<string, string | number>) => format(locale, key, vars);
+}
 
 export function RespotifyApp() {
   const hydrate = useRespotify((s) => s.hydrate);
@@ -65,26 +71,61 @@ export function RespotifyApp() {
 
 function Header() {
   const step = useRespotify((s) => s.step);
+  const t = useT();
+  const label =
+    step === "home"
+      ? t("stepConnect")
+      : step === "select"
+        ? t("stepChoose")
+        : step === "transfer"
+          ? t("stepMove")
+          : t("stepDone");
   return (
     <header className="border-b border-border/80 pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
           <Disc3 className="size-5 text-primary" strokeWidth={1.6} />
-          <span className="font-display text-lg tracking-tight">Respotify</span>
+          <span className="font-display text-lg tracking-tight">{t("brand")}</span>
         </div>
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-faint">
-          {step === "home" ? "Connect" : step === "select" ? "Choose" : step === "transfer" ? "Move" : "Done"}
-        </span>
+        <div className="flex items-center gap-3">
+          <LangSwitch />
+          <span className="text-xs font-medium uppercase tracking-[0.14em] text-faint">{label}</span>
+        </div>
       </div>
     </header>
   );
 }
 
+function LangSwitch() {
+  const locale = useRespotify((s) => s.locale);
+  const setLocale = useRespotify((s) => s.setLocale);
+  return (
+    <div className="flex items-center gap-1 text-xs font-medium">
+      <button
+        type="button"
+        className={cn("rounded-sm px-1.5 py-0.5", locale === "en" ? "text-primary" : "text-faint")}
+        onClick={() => setLocale("en")}
+      >
+        EN
+      </button>
+      <span className="text-faint">·</span>
+      <button
+        type="button"
+        className={cn("rounded-sm px-1.5 py-0.5", locale === "ru" ? "text-primary" : "text-faint")}
+        onClick={() => setLocale("ru")}
+      >
+        RU
+      </button>
+    </div>
+  );
+}
+
 function BottomNav({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+  const t = useT();
   const items: { id: Tab; label: string; icon: typeof ArrowLeftRight }[] = [
-    { id: "transfer", label: "Transfer", icon: ArrowLeftRight },
-    { id: "backup", label: "Backup", icon: FolderInput },
-    { id: "setup", label: "Setup", icon: Settings },
+    { id: "transfer", label: t("navTransfer"), icon: ArrowLeftRight },
+    { id: "backup", label: t("navBackup"), icon: FolderInput },
+    { id: "setup", label: t("navSetup"), icon: Settings },
   ];
   return (
     <nav
@@ -116,6 +157,7 @@ function BottomNav({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
 }
 
 function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
+  const t = useT();
   const source = useRespotify((s) => s.source);
   const dest = useRespotify((s) => s.dest);
   const error = useRespotify((s) => s.error);
@@ -130,29 +172,28 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
-        <p className="text-xs font-medium uppercase tracking-[0.16em] text-primary">Spotify to Spotify</p>
+        <p className="text-xs font-medium uppercase tracking-[0.16em] text-primary">{t("tag")}</p>
         <h1 className="font-display text-[2.15rem] leading-[1.1] tracking-[-0.03em] sm:text-[2.6rem]">
-          Move your library. Keep your music.
+          {t("headline")}
         </h1>
-        <p className="max-w-prose text-muted">
-          Connect two accounts through Spotify’s own login, then copy playlists, liked songs, albums,
-          artists, and podcasts. Tokens stay on this phone.
-        </p>
+        <p className="max-w-prose text-muted">{t("lead")}</p>
       </section>
 
       <div className="flex flex-col gap-3">
         <AccountCard
-          label="Source"
-          hint="The account you are leaving"
+          label={t("source")}
+          hint={t("sourceHint")}
           session={source}
+          connectLabel={t("connectSource")}
           onConnect={() => void connectLive("source")}
           onDemo={() => connectDemo("source")}
           onDisconnect={() => disconnect("source")}
         />
         <AccountCard
-          label="Destination"
-          hint="The account that receives the library"
+          label={t("destination")}
+          hint={t("destHint")}
           session={dest}
+          connectLabel={t("connectDest")}
           onConnect={() => void connectLive("destination")}
           onDemo={() => connectDemo("destination")}
           onDisconnect={() => disconnect("destination")}
@@ -166,14 +207,14 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
 
       <div className="flex flex-col gap-2">
         <Button block disabled={!source || !dest || busy} onClick={() => void loadSourceLibrary()}>
-          {busy ? "Reading library…" : "Continue"}
+          {busy ? t("readingLibrary") : t("continue")}
           <ArrowRight className="size-4" />
         </Button>
         <Button variant="secondary" block onClick={runDemoBoth}>
-          Run demo transfer
+          {t("runDemo")}
         </Button>
         <Button variant="ghost" block onClick={onOpenSetup}>
-          Client ID and install
+          {t("openSetup")}
         </Button>
       </div>
 
@@ -186,6 +227,7 @@ function AccountCard({
   label,
   hint,
   session,
+  connectLabel,
   onConnect,
   onDemo,
   onDisconnect,
@@ -193,10 +235,12 @@ function AccountCard({
   label: string;
   hint: string;
   session: Session | null;
+  connectLabel: string;
   onConnect: () => void;
   onDemo: () => void;
   onDisconnect: () => void;
 }) {
+  const t = useT();
   return (
     <section className="rounded-xl border border-border bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -206,7 +250,7 @@ function AccountCard({
             <div className="mt-2">
               <p className="font-medium">{session.user.displayName}</p>
               <p className="text-sm text-muted">
-                {session.mode === "demo" ? "Demo account" : session.user.email || session.user.id}
+                {session.mode === "demo" ? t("demoAccount") : session.user.email || session.user.id}
               </p>
             </div>
           ) : (
@@ -216,7 +260,7 @@ function AccountCard({
         {session && (
           <span className="inline-flex items-center gap-1 rounded-sm bg-raised px-2 py-1 text-xs text-primary">
             <Check className="size-3" />
-            Connected
+            {t("connected")}
           </span>
         )}
       </div>
@@ -224,15 +268,15 @@ function AccountCard({
         {session ? (
           <Button variant="secondary" block onClick={onDisconnect}>
             <Unplug className="size-4" />
-            Disconnect
+            {t("disconnect")}
           </Button>
         ) : (
           <>
             <Button block onClick={onConnect}>
-              Connect {label.toLowerCase()}
+              {connectLabel}
             </Button>
             <Button variant="ghost" onClick={onDemo}>
-              Use demo
+              {t("useDemo")}
             </Button>
           </>
         )}
@@ -242,6 +286,8 @@ function AccountCard({
 }
 
 function SelectStep() {
+  const t = useT();
+  const locale = useRespotify((s) => s.locale);
   const snapshot = useRespotify((s) => s.snapshot);
   const selection = useRespotify((s) => s.selection);
   const dest = useRespotify((s) => s.dest);
@@ -250,28 +296,46 @@ function SelectStep() {
   const startTransfer = useRespotify((s) => s.startTransfer);
   const backFromWizard = useRespotify((s) => s.backFromWizard);
   const notice = useRespotify((s) => s.notice);
+  const showMoreInfo = useRespotify((s) => s.showMoreInfo);
   const counts = useMemo(() => (snapshot ? countsFor(snapshot) : null), [snapshot]);
 
   if (!snapshot || !counts) return null;
 
+  const owned = snapshot.playlists.filter((p) => p.owned);
+  const followed = snapshot.playlists.filter((p) => !p.owned);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-3xl tracking-tight">Choose what to move</h1>
+        <h1 className="font-display text-3xl tracking-tight">{t("chooseTitle")}</h1>
         <p className="mt-2 text-sm text-muted">
-          From {snapshot.user.displayName} to {dest?.user.displayName}. Uncheck anything you want to
-          leave behind.
+          {t("chooseLead", { from: snapshot.user.displayName, to: dest?.user.displayName ?? "" })}
         </p>
-        {notice ? <div className="mt-3"><Callout>{notice}</Callout></div> : null}
+        {notice ? (
+          <div className="mt-3">
+            <Callout>{notice}</Callout>
+          </div>
+        ) : null}
       </div>
       <ul className="flex flex-col gap-2">
-        {(Object.keys(CATALOG_LABELS) as CatalogKey[]).map((key) => (
+        {(
+          [
+            "liked",
+            "albums",
+            "ownedPlaylists",
+            "followedPlaylists",
+            "artists",
+            "shows",
+            "episodes",
+            "recentArchive",
+          ] as CatalogKey[]
+        ).map((key) => (
           <li key={key}>
             <label className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4">
               <span>
-                <span className="block text-sm font-medium">{CATALOG_LABELS[key]}</span>
+                <span className="block text-sm font-medium">{catalogLabel(locale, key)}</span>
                 {key === "recentArchive" && (
-                  <span className="block text-xs text-faint">Saved as a playlist — not real history</span>
+                  <span className="block text-xs text-faint">{t("recentNote")}</span>
                 )}
               </span>
               <span className="flex items-center gap-3">
@@ -284,6 +348,8 @@ function SelectStep() {
                 />
               </span>
             </label>
+            {showMoreInfo && key === "ownedPlaylists" ? <PlaylistPeek lists={owned} /> : null}
+            {showMoreInfo && key === "followedPlaylists" ? <PlaylistPeek lists={followed} /> : null}
           </li>
         ))}
       </ul>
@@ -295,47 +361,77 @@ function SelectStep() {
           onChange={(e) => setPrecise(e.target.checked)}
         />
         <span>
-          <span className="font-medium">Precise liked-song order</span>
-          <span className="mt-1 block text-muted">
-            Older saves first so the original newest track lands on top. Slower on large libraries.
-          </span>
+          <span className="font-medium">{t("preciseLikes")}</span>
+          <span className="mt-1 block text-muted">{t("preciseLikesHelp")}</span>
         </span>
       </label>
       <CopyFollowedToggle />
       <div className="flex flex-col gap-2">
         <Button block onClick={() => void startTransfer()}>
-          Start transfer
+          {t("startTransfer")}
         </Button>
         <Button variant="ghost" onClick={backFromWizard}>
-          Back
+          {t("back")}
         </Button>
       </div>
     </div>
   );
 }
 
+function PlaylistPeek({
+  lists,
+}: {
+  lists: { name: string; trackCount: number; trackSource?: "search" | "hidden" }[];
+}) {
+  const t = useT();
+  if (lists.length === 0) return null;
+  return (
+    <ul className="mt-1 mb-2 max-h-40 overflow-y-auto rounded-md border border-border/70 bg-raised px-3 py-2 text-xs text-muted">
+      {lists.slice(0, 40).map((list, i) => (
+        <li key={`${list.name}-${i}`} className="flex items-baseline justify-between gap-2 py-0.5">
+          <span className="truncate">{list.name}</span>
+          <span className="shrink-0 font-mono tabular-nums text-faint">
+            {list.trackCount}
+            {list.trackSource === "search" ? ` · ${t("rebuilt")}` : ""}
+            {list.trackSource === "hidden" ? ` · ${t("hiddenList")}` : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function TransferStep() {
+  const t = useT();
   const progress = useRespotify((s) => s.progress);
   const pause = useRespotify((s) => s.pause);
   const error = useRespotify((s) => s.error);
   const notice = useRespotify((s) => s.notice);
   const startTransfer = useRespotify((s) => s.startTransfer);
   const busy = useRespotify((s) => s.busy);
+  const showTrackNames = useRespotify((s) => s.showTrackNames);
+  const showMoreInfo = useRespotify((s) => s.showMoreInfo);
   const pct =
     progress && progress.total > 0 ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 0;
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-3xl tracking-tight">Moving your library</h1>
+        <h1 className="font-display text-3xl tracking-tight">{t("movingTitle")}</h1>
         <p className="mt-2 text-sm text-muted">
-          {progress?.catalog ?? "Preparing"}
+          {progress?.catalog ?? t("preparing")}
           {progress?.currentName ? ` · ${progress.currentName}` : ""}
         </p>
+        {showTrackNames && progress?.currentTrack ? (
+          <p className="mt-1 text-sm text-fg">{progress.currentTrack}</p>
+        ) : null}
+        {showMoreInfo && progress?.message ? (
+          <p className="mt-1 text-xs text-faint">{progress.message}</p>
+        ) : null}
       </div>
       <div className="rounded-xl border border-border bg-surface p-4">
         <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-sm text-muted">Progress</span>
+          <span className="text-sm text-muted">{t("progress")}</span>
           <span className="font-mono text-sm tabular-nums">{pct}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-raised">
@@ -355,11 +451,11 @@ function TransferStep() {
         {busy ? (
           <Button variant="secondary" block onClick={pause}>
             <Pause className="size-4" />
-            Pause
+            {t("pause")}
           </Button>
         ) : (
           <Button block onClick={() => void startTransfer()}>
-            Resume
+            {t("resume")}
           </Button>
         )}
       </div>
@@ -368,6 +464,8 @@ function TransferStep() {
 }
 
 function DoneStep() {
+  const t = useT();
+  const locale = useRespotify((s) => s.locale);
   const report = useRespotify((s) => s.report);
   const snapshot = useRespotify((s) => s.snapshot);
   const dest = useRespotify((s) => s.dest);
@@ -376,16 +474,14 @@ function DoneStep() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-3xl tracking-tight">Transfer complete</h1>
-        <p className="mt-2 text-sm text-muted">
-          Copied into {dest?.user.displayName}. Open Spotify on the destination account to confirm.
-        </p>
+        <h1 className="font-display text-3xl tracking-tight">{t("doneTitle")}</h1>
+        <p className="mt-2 text-sm text-muted">{t("doneLead", { name: dest?.user.displayName ?? "" })}</p>
       </div>
       {report && (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
           {Object.entries(report.copied).map(([key, n]) => (
             <li key={key} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span>{CATALOG_LABELS[key as CatalogKey] ?? key}</span>
+              <span>{catalogLabel(locale, key as CatalogKey)}</span>
               <span className="font-mono tabular-nums text-muted">{n}</span>
             </li>
           ))}
@@ -400,10 +496,10 @@ function DoneStep() {
           onClick={() => snapshot && downloadBackup(snapshotToBackup(snapshot))}
         >
           <Download className="size-4" />
-          Download library backup
+          {t("downloadBackup")}
         </Button>
         <Button block onClick={reset}>
-          Start another transfer
+          {t("another")}
         </Button>
       </div>
     </div>
@@ -411,6 +507,7 @@ function DoneStep() {
 }
 
 function BackupTab() {
+  const t = useT();
   const snapshot = useRespotify((s) => s.snapshot);
   const importFile = useRespotify((s) => s.importFile);
   const notice = useRespotify((s) => s.notice);
@@ -420,11 +517,8 @@ function BackupTab() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-3xl tracking-tight">Backup</h1>
-        <p className="mt-2 text-sm text-muted">
-          Download a JSON snapshot of the source library, or restore a Respotify backup / Spotify
-          privacy export as playlists.
-        </p>
+        <h1 className="font-display text-3xl tracking-tight">{t("backupTitle")}</h1>
+        <p className="mt-2 text-sm text-muted">{t("backupLead")}</p>
       </div>
       {error && <Callout tone="danger">{error}</Callout>}
       {notice && <Callout>{notice}</Callout>}
@@ -435,7 +529,7 @@ function BackupTab() {
         onClick={() => snapshot && downloadBackup(snapshotToBackup(snapshot))}
       >
         <Download className="size-4" />
-        {snapshot ? "Download current library" : "Connect a source first"}
+        {snapshot ? t("downloadCurrent") : t("connectSourceFirst")}
       </Button>
       <input
         ref={fileRef}
@@ -450,7 +544,7 @@ function BackupTab() {
       />
       <Button block onClick={() => fileRef.current?.click()}>
         <FolderInput className="size-4" />
-        Import backup or privacy export
+        {t("importBackup")}
       </Button>
       <Honesty />
     </div>
@@ -458,9 +552,16 @@ function BackupTab() {
 }
 
 function SetupTab() {
+  const t = useT();
   const clientIdValue = useRespotify((s) => s.clientId);
   const redirectUri = useRespotify((s) => s.redirectUri);
   const setClientIdValue = useRespotify((s) => s.setClientIdValue);
+  const showTrackNames = useRespotify((s) => s.showTrackNames);
+  const setShowTrackNames = useRespotify((s) => s.setShowTrackNames);
+  const showMoreInfo = useRespotify((s) => s.showMoreInfo);
+  const setShowMoreInfo = useRespotify((s) => s.setShowMoreInfo);
+  const locale = useRespotify((s) => s.locale);
+  const setLocale = useRespotify((s) => s.setLocale);
   const standalone =
     typeof window !== "undefined" &&
     (window.matchMedia("(display-mode: standalone)").matches ||
@@ -469,52 +570,158 @@ function SetupTab() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-3xl tracking-tight">Setup</h1>
-        <p className="mt-2 text-sm text-muted">
-          This phone app runs the same engine as the git repo. Spotify login is official OAuth — not
-          a Grok connector.
-        </p>
+        <h1 className="font-display text-3xl tracking-tight">{t("setupTitle")}</h1>
+        <p className="mt-2 text-sm text-muted">{t("setupLead")}</p>
       </div>
 
       <section className="rounded-xl border border-border bg-surface p-4">
         <div className="flex items-start gap-3">
           <Smartphone className="mt-0.5 size-4 text-primary" />
           <div className="text-sm">
-            <p className="font-medium">{standalone ? "Running as an installed app" : "Install on Android"}</p>
-            <p className="mt-1 text-muted">
-              {standalone
-                ? "Chrome opened Respotify without the browser chrome."
-                : "In Chrome: menu → Add to Home screen. Spotify login still uses Spotify’s own page, not a WebView."}
-            </p>
+            <p className="font-medium">{standalone ? t("runningInstalled") : t("installAndroid")}</p>
+            <p className="mt-1 text-muted">{standalone ? t("runningPwa") : t("installPwa")}</p>
+            <p className="mt-2 text-muted">{t("apkHelp")}</p>
+            <a
+              href={RELEASES_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-fg"
+            >
+              <Download className="size-4" />
+              {t("downloadApk")}
+            </a>
           </div>
         </div>
       </section>
 
+      <details open className="rounded-xl border border-border bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-medium">{t("displayOpts")}</summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <CheckRow
+            checked={showTrackNames}
+            onChange={setShowTrackNames}
+            title={t("showTrackNames")}
+            help={t("showTrackNamesHelp")}
+          />
+          <CheckRow
+            checked={showMoreInfo}
+            onChange={setShowMoreInfo}
+            title={t("showMoreInfo")}
+            help={t("showMoreInfoHelp")}
+          />
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-muted">{t("language")}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={cn(
+                  "min-h-9 rounded-md px-3",
+                  locale === "en" ? "bg-primary text-primary-fg" : "bg-raised text-muted",
+                )}
+                onClick={() => setLocale("en")}
+              >
+                {t("langEn")}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "min-h-9 rounded-md px-3",
+                  locale === "ru" ? "bg-primary text-primary-fg" : "bg-raised text-muted",
+                )}
+                onClick={() => setLocale("ru")}
+              >
+                {t("langRu")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details open className="rounded-xl border border-border bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-medium">{t("transferOpts")}</summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <CopyFollowedToggle nested />
+          <PreciseLikesToggle />
+        </div>
+      </details>
+
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-        <p className="text-sm font-medium">Live Spotify</p>
-        <p className="text-sm text-muted">
-          Create an app in the Spotify Developer Dashboard, add this Redirect URI, then paste the
-          Client ID. Add both Spotify emails under Users Management (development mode, max 5). The
-          dashboard owner needs Premium.
-        </p>
+        <p className="text-sm font-medium">{t("liveSpotify")}</p>
+        <p className="text-sm text-muted">{t("liveHelp")}</p>
+        <p className="text-xs text-faint">{t("redirectLabel")}</p>
         <CopyField value={redirectUri} />
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-muted">Client ID</span>
+          <span className="text-muted">{t("clientId")}</span>
           <input
             value={clientIdValue}
             onChange={(e) => setClientIdValue(e.target.value)}
-            placeholder="Paste your Spotify Client ID"
+            placeholder={t("clientIdPh")}
             className="min-h-11 rounded-md border border-border bg-raised px-3 text-fg placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/70"
           />
         </label>
+        <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-sm text-primary">
+          {t("githubRepo")}
+        </a>
       </div>
     </div>
   );
 }
 
-function CopyFollowedToggle() {
+function CheckRow({
+  checked,
+  onChange,
+  title,
+  help,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  title: string;
+  help: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 text-sm">
+      <input
+        type="checkbox"
+        className="mt-0.5 size-5 accent-primary"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>
+        <span className="font-medium">{title}</span>
+        <span className="mt-1 block text-muted">{help}</span>
+      </span>
+    </label>
+  );
+}
+
+function PreciseLikesToggle() {
+  const t = useT();
+  const selection = useRespotify((s) => s.selection);
+  const setPrecise = useRespotify((s) => s.setPrecise);
+  return (
+    <CheckRow
+      checked={selection.preciseLikes}
+      onChange={setPrecise}
+      title={t("preciseLikes")}
+      help={t("preciseLikesHelp")}
+    />
+  );
+}
+
+function CopyFollowedToggle({ nested = false }: { nested?: boolean }) {
+  const t = useT();
   const selection = useRespotify((s) => s.selection);
   const setCopyFollowed = useRespotify((s) => s.setCopyFollowed);
+  if (nested) {
+    return (
+      <CheckRow
+        checked={selection.copyFollowedAsNew}
+        onChange={setCopyFollowed}
+        title={t("copyFollowed")}
+        help={t("copyFollowedHelp")}
+      />
+    );
+  }
   return (
     <label className="flex items-start gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
       <input
@@ -524,30 +731,22 @@ function CopyFollowedToggle() {
         onChange={(e) => setCopyFollowed(e.target.checked)}
       />
       <span>
-        <span className="font-medium">Copy followed playlists as new</span>
-        <span className="mt-1 block text-muted">
-          On before you scan. Radio / Popular lists rebuild from Spotify search when the original
-          songs are hidden. Uncheck to only follow the original list.
-        </span>
+        <span className="font-medium">{t("copyFollowed")}</span>
+        <span className="mt-1 block text-muted">{t("copyFollowedHelp")}</span>
       </span>
     </label>
   );
 }
 
 function Honesty() {
+  const t = useT();
   return (
     <aside className="rounded-xl border border-border bg-surface p-4">
       <div className="flex items-start gap-3">
         <Shield className="mt-0.5 size-4 text-primary" />
         <div className="text-sm">
-          <p className="font-medium">What this can and cannot copy</p>
-          <p className="mt-1 text-muted">
-            Playlists, liked songs, albums, artists, podcasts, and episodes copy through Spotify’s
-            official API. Radio / Popular lists that Spotify will not return are rebuilt from search
-            (songs Spotify can find). Daily Mix, Discover Weekly, and similar Made For You lists
-            stay hidden. Listening history, Wrapped, followers, and the taste algorithm cannot be
-            written to another account. Recently played is saved as a playlist archive.
-          </p>
+          <p className="font-medium">{t("honestyTitle")}</p>
+          <p className="mt-1 text-muted">{t("honestyBody")}</p>
         </div>
       </div>
     </aside>
@@ -555,11 +754,10 @@ function Honesty() {
 }
 
 function ErrorList({ errors }: { errors: { item: string; message: string }[] }) {
+  const locale = useRespotify((s) => s.locale);
   return (
     <div className="overflow-hidden rounded-xl border border-danger/40 bg-danger/10">
-      <p className="border-b border-danger/30 px-4 py-3 text-sm">
-        {errors.length} item{errors.length === 1 ? "" : "s"} could not be copied
-      </p>
+      <p className="border-b border-danger/30 px-4 py-3 text-sm">{failedLabel(locale, errors.length)}</p>
       <ul className="max-h-80 overflow-y-auto">
         {errors.map((e, i) => (
           <li key={`${e.item}-${i}`} className="border-t border-danger/20 px-4 py-3 text-sm">
@@ -588,13 +786,14 @@ function Callout({ children, tone = "plain" }: { children: ReactNode; tone?: "pl
 }
 
 function CopyField({ value }: { value: string }) {
+  const t = useT();
   return (
     <button
       type="button"
       onClick={() => void navigator.clipboard.writeText(value)}
       className="min-h-11 truncate rounded-md border border-border bg-raised px-3 text-left font-mono text-xs text-fg"
     >
-      {value || "Redirect URI appears here in the browser"}
+      {value || t("redirectMissing")}
     </button>
   );
 }

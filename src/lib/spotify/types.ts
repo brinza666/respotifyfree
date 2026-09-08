@@ -70,8 +70,21 @@ export type ProgressEvent = {
   done: number;
   total: number;
   currentName?: string;
+  currentTrack?: string;
   message?: string;
   errors: { item: string; message: string }[];
+};
+
+export type AppPrefs = {
+  locale: "en" | "ru";
+  showTrackNames: boolean;
+  showMoreInfo: boolean;
+};
+
+export const DEFAULT_PREFS: AppPrefs = {
+  locale: "en",
+  showTrackNames: true,
+  showMoreInfo: false,
 };
 
 export type TransferReport = {

@@ -20,4 +20,8 @@ await writeFile(join(site, ".nojekyll"), "");
 await cp(join(pub, "assets"), join(site, "assets"), { recursive: true });
 await cp(join(pub, "favicon.svg"), join(site, "favicon.svg"));
 await cp(join(pub, "manifest.webmanifest"), join(site, "manifest.webmanifest"));
+await writeFile(
+  join(site, "README.md"),
+  await readFile(join(root, "docs/pages-readme.md")),
+);
 console.log("Wrote static GitHub Pages site to site/");

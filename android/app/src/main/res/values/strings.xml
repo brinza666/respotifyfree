@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Respotify</string>
-    <!-- Paste the HTTPS origin of the TypeScript engine (Grok preview or deploy). -->
     <string name="engine_url">https://brinza666.github.io/respotifyfree/</string>
-    <string name="engine_hint">Paste the Respotify HTTPS URL from your browser, then Open.</string>
-    <string name="open">Open engine</string>
+    <string name="engine_hint">Respotify opens the web app. Spotify login uses Chrome, not this window.</string>
+    <string name="open">Open Respotify</string>
 </resources>

@@ -20,6 +20,9 @@ await writeFile(join(site, ".nojekyll"), "");
 await cp(join(pub, "assets"), join(site, "assets"), { recursive: true });
 await cp(join(pub, "favicon.svg"), join(site, "favicon.svg"));
 await cp(join(pub, "manifest.webmanifest"), join(site, "manifest.webmanifest"));
+for (const name of ["demo-en.mp4", "demo-ru.mp4", "demo-en.jpg", "demo-ru.jpg"]) {
+  await cp(join(pub, name), join(site, name));
+}
 await writeFile(
   join(site, "README.md"),
   await readFile(join(root, "docs/pages-readme.md")),

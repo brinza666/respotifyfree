@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Respotify</string>
     <!-- Paste the HTTPS origin of the TypeScript engine (Grok preview or deploy). -->
-    <string name="engine_url"></string>
+    <string name="engine_url">https://brinza666.github.io/respotifyfree/</string>
     <string name="engine_hint">Paste the Respotify HTTPS URL from your browser, then Open.</string>
     <string name="open">Open engine</string>
 </resources>

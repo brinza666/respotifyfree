@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { backupToSnapshot, parseBackup, parseSpotifyHistoryExport, snapshotToBackup } from "./backup";
 import { demoDestUser, demoSourceLibrary, demoWriter } from "./demo";
 import { grabLiveLibrary, liveWriter } from "./live";
-import { clientId, seedClientId, setClientId, startLogin } from "./pkce";
+import { clientId, redirectUri, seedClientId, setClientId, startLogin } from "./pkce";
 import { clearSession, readSession, writeSession } from "./session";
 import { countsFor, runTransfer } from "./transfer";
 import {
@@ -79,7 +79,7 @@ export const useRespotify = create<Store>((set, get) => ({
       source,
       dest,
       clientId: clientId(),
-      redirectUri: `${window.location.origin}/callback`,
+      redirectUri: redirectUri(),
     });
   },
 

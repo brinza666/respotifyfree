@@ -8,6 +8,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.production
 *.log
 .DS_Store
 *.tsbuildinfo
@@ -17,7 +18,12 @@ android/app/build/
 android/local.properties
 android/app/debug.keystore
 releases/*.apk
+site/
+snapshot-pages.log
 .idea/
 *.iml
-.grok/*
-!.grok/config.toml
+.grok/
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+mise.toml

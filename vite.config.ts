@@ -4,8 +4,11 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 
-// 0.0.0.0:8080 is the local/dev contract. Spotify allows http://127.0.0.1/callback.
+const pages = process.env.GITHUB_PAGES === "1";
+const base = pages ? "/respotifyfree/" : "/";
+
 export default defineConfig(({ command, isPreview }) => ({
+  base,
   server: {
     host: "0.0.0.0",
     port: 8080,
@@ -19,7 +22,9 @@ export default defineConfig(({ command, isPreview }) => ({
   resolve: { tsconfigPaths: true },
   plugins: [
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({
+      spa: { enabled: true },
+    }),
     ...(command === "build" || isPreview
       ? [
           nitro({

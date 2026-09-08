@@ -37,7 +37,9 @@ async function sha256Base64Url(plain: string) {
 }
 
 export function redirectUri() {
-  return `${window.location.origin}/callback`;
+  const base = import.meta.env.BASE_URL || "/";
+  const path = `${base}callback`.replace(/\/{2,}/g, "/");
+  return `${window.location.origin}${path}`;
 }
 
 export function configuredClientId() {

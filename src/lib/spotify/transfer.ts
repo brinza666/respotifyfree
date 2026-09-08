@@ -20,6 +20,7 @@ export type Writer = {
   createPlaylist: (userId: string, playlist: PlaylistRef) => Promise<string>;
   addTracks: (playlistId: string, uris: string[]) => Promise<void>;
   delay: (ms: number) => Promise<void>;
+  rebuildTracks?: (list: PlaylistRef) => Promise<TrackRef[]>;
 };
 
 function chunk<T>(items: T[], size: number) {
@@ -155,22 +156,36 @@ export async function runTransfer(opts: {
             currentName: list.name,
           });
           try {
-            const uris = list.tracks.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
+            let uris = list.tracks.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
+            if (selection.copyFollowedAsNew && uris.length === 0 && writer.rebuildTracks) {
+              const rebuilt = await writer.rebuildTracks(list);
+              uris = rebuilt.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
+            }
             if (selection.copyFollowedAsNew && uris.length > 0) {
               const destId = await writer.createPlaylist(destUser.id, { ...list, owned: true, public: false });
               playlistMap[list.id] = destId;
               for (const batch of chunk(uris, 100)) await writer.addTracks(destId, batch);
             } else {
-              await writer.followPlaylist(list.id);
-              if (selection.copyFollowedAsNew && uris.length === 0) {
-                fail(
-                  list.name,
-                  new Error(
-                    list.trackSource === "hidden"
-                      ? "Spotify hid this list. Followed the original instead."
-                      : "No tracks to copy. Followed the original instead.",
-                  ),
-                );
+              try {
+                await writer.followPlaylist(list.id);
+              } catch (followErr) {
+                if (writer.rebuildTracks) {
+                  const rebuilt = await writer.rebuildTracks(list);
+                  uris = rebuilt.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
+                  if (uris.length > 0) {
+                    const destId = await writer.createPlaylist(destUser.id, {
+                      ...list,
+                      owned: true,
+                      public: false,
+                    });
+                    playlistMap[list.id] = destId;
+                    for (const batch of chunk(uris, 100)) await writer.addTracks(destId, batch);
+                    n += 1;
+                    await writer.delay(80);
+                    continue;
+                  }
+                }
+                throw followErr;
               }
             }
             n += 1;

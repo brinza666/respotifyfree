@@ -22,6 +22,7 @@ export function demoWriter(): Writer {
     saveEpisodes: async () => undefined,
     followArtists: async () => undefined,
     followPlaylist: async () => undefined,
+    rebuildTracks: async (list) => list.tracks,
     createPlaylist: async (_userId, playlist) => `dest-${playlist.id}`,
     addTracks: async () => undefined,
   };

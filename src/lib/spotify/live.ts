@@ -2,7 +2,8 @@ import { refreshAccessToken } from "./pkce";
 import {
   isMadeForYou,
   parseArtistStation,
-  pickPlaylistMatch,
+  playlistSearchQueries,
+  rankPlaylistHits,
   pickTrackMatch,
   trackSearchQuery,
 } from "./reconstruct";
@@ -67,6 +68,10 @@ export async function spotifyFetch(
     await sleep(wait * 1000);
     return spotifyFetch(role, path, init, attempt + 1);
   }
+  if (res.status >= 500 && attempt < 3) {
+    await sleep(400 * 2 ** attempt);
+    return spotifyFetch(role, path, init, attempt + 1);
+  }
   return res;
 }
 
@@ -114,10 +119,10 @@ async function send(
 ): Promise<Response> {
   const first = await spotifyFetch(role, primary, init);
   if (first.ok) return first;
-  if (fallback && (first.status === 404 || first.status === 405)) {
+  if (fallback && (first.status === 404 || first.status === 405 || first.status >= 500 || first.status === 400)) {
     const second = await spotifyFetch(role, fallback.path, fallback.init ?? init);
     if (second.ok) return second;
-    return second;
+    return second.status === 404 || second.status === 405 ? first : second;
   }
   return first;
 }
@@ -131,12 +136,15 @@ async function saveLibrary(role: Role, uris: string[], legacy: () => Promise<Res
   const qs = uris.map(encodeURIComponent).join(",");
   const res = await spotifyFetch(role, `/me/library?uris=${qs}`, { method: "PUT" });
   if (res.ok) return;
-  if (res.status === 404 || res.status === 405) {
-    const old = await legacy();
-    if (old.ok) return;
-    await fail(label, old);
+  const old = await legacy();
+  if (old.ok) return;
+  if (old.status >= 500) {
+    await sleep(800);
+    const again = await legacy();
+    if (again.ok) return;
+    await fail(label, again);
   }
-  await fail(label, res);
+  await fail(label, old.status === 404 || old.status === 405 ? res : old);
 }
 
 async function fetchMe(role: Role): Promise<SpotifyUser> {
@@ -323,16 +331,53 @@ async function searchTracks(role: Role, q: string, pages = 5): Promise<TrackRef[
 }
 
 async function searchPlaylists(role: Role, q: string): Promise<{ id: string; name: string }[]> {
-  const res = await spotifyFetch(
-    role,
-    `/search?q=${encodeURIComponent(q)}&type=playlist&limit=10&market=from_token`,
-  );
-  if (!res.ok) return [];
-  const json = (await res.json()) as Record<string, unknown>;
-  return compactMap(itemsOf((json.playlists as Record<string, unknown>) ?? {}), (raw) => {
-    const p = raw as { id?: string; name?: string } | null;
-    return p?.id && p.name ? { id: p.id, name: p.name } : null;
-  });
+  if (!q) return [];
+  const out: { id: string; name: string }[] = [];
+  const seen = new Set<string>();
+  for (let page = 0; page < 2; page++) {
+    const res = await spotifyFetch(
+      role,
+      `/search?q=${encodeURIComponent(q)}&type=playlist&limit=10&market=from_token&offset=${page * 10}`,
+    );
+    if (!res.ok) break;
+    const json = (await res.json()) as Record<string, unknown>;
+    const batch = compactMap(itemsOf((json.playlists as Record<string, unknown>) ?? {}), (raw) => {
+      const p = raw as { id?: string; name?: string } | null;
+      return p?.id && p.name ? { id: p.id, name: p.name } : null;
+    });
+    for (const hit of batch) {
+      if (seen.has(hit.id)) continue;
+      seen.add(hit.id);
+      out.push(hit);
+    }
+    if (batch.length < 10) break;
+    await sleep(80);
+  }
+  return out;
+}
+
+async function searchRebuild(role: Role, list: PlaylistRef): Promise<TrackRef[]> {
+  const station = parseArtistStation(list.name);
+  if (station) {
+    const tracks = await searchTracks(role, `artist:"${station.artist}"`);
+    if (tracks.length) return resolveLooseTracks(role, tracks);
+  }
+
+  const queries = playlistSearchQueries(list.name);
+  for (const q of queries) {
+    const hits = rankPlaylistHits(q, await searchPlaylists(role, q));
+    for (const match of hits) {
+      if (match.id === list.id) continue;
+      const tracks = await playlistTracks(role, match.id);
+      if (tracks.length) return resolveLooseTracks(role, tracks);
+    }
+  }
+
+  for (const q of queries) {
+    const tracks = await searchTracks(role, q, 5);
+    if (tracks.length) return tracks;
+  }
+  return [];
 }
 
 async function resolveLooseTracks(role: Role, tracks: TrackRef[]): Promise<TrackRef[]> {
@@ -365,18 +410,9 @@ async function fillPlaylist(role: Role, list: PlaylistRef): Promise<PlaylistRef>
     return { ...list, tracks: [], trackCount: 0, trackSource: "hidden" };
   }
 
-  if (tracks.length === 0) {
-    const station = parseArtistStation(list.name);
-    if (station) {
-      tracks = await searchTracks(role, `artist:"${station.artist}"`);
-      if (tracks.length) trackSource = "search";
-    } else if (!list.owned) {
-      const match = pickPlaylistMatch(list.name, await searchPlaylists(role, list.name));
-      if (match && match.id !== list.id) {
-        tracks = await playlistTracks(role, match.id);
-        if (tracks.length) trackSource = "search";
-      }
-    }
+  if (tracks.length === 0 && !list.owned) {
+    tracks = await searchRebuild(role, list);
+    if (tracks.length) trackSource = "search";
   }
 
   const resolved = await resolveLooseTracks(role, tracks);
@@ -516,9 +552,17 @@ export function liveWriter(role: Role): Writer {
       await saveLibrary(
         role,
         libraryUris("playlist", [id]),
-        () => spotifyFetch(role, `/playlists/${id}/followers`, { method: "PUT" }),
+        () =>
+          spotifyFetch(role, `/playlists/${id}/followers`, {
+            method: "PUT",
+            body: JSON.stringify({ public: false }),
+          }),
         "Follow playlist failed",
       );
+    },
+    rebuildTracks: async (list) => {
+      if (list.tracks.some((t) => t.uri.startsWith("spotify:track:"))) return list.tracks;
+      return searchRebuild(role, list);
     },
     createPlaylist: async (_userId, playlist) => {
       const body = (isPublic: boolean) =>

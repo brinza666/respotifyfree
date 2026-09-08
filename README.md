@@ -6,6 +6,20 @@ Connect **source** and **destination** through Spotify’s own login (Authorizat
 
 Engine: [brinza666/respotifyfree](https://github.com/brinza666/respotifyfree).
 
+## Develop here
+
+```
+cd /home/brinza/Work/respotifyfree
+mise trust
+npm install
+npm run dev          # http://127.0.0.1:8080
+npm run typecheck
+npm run setup:android
+npm run build:apk    # releases/respotify-debug.apk
+```
+
+Register `http://127.0.0.1:8080/callback` (and later your HTTPS origin + `/callback`) in the Spotify Dashboard.
+
 ## Android
 
 This repo is the **background engine**. The phone UI is the same web app (Add to Home screen in Chrome).

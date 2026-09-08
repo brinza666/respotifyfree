@@ -1,0 +1,28 @@
+# Project permissions for Grok working in this repo.
+# Trust this folder once in the TUI so these rules apply.
+
+[permission]
+allow = [
+  "Read",
+  "Edit",
+  "Grep",
+  "Bash(npm *)",
+  "Bash(npx *)",
+  "Bash(node *)",
+  "Bash(git *)",
+  "Bash(gh *)",
+  "Bash(mise *)",
+  "Bash(java *)",
+  "Bash(javac *)",
+  "Bash(keytool *)",
+  "Bash(gradle *)",
+  "Bash(./gradlew *)",
+  "Bash(android/gradlew *)",
+  "Bash(sdkmanager *)",
+  "Bash(adb *)",
+  "Bash(sh scripts/*)",
+]
+deny = [
+  "Bash(rm -rf /)",
+  "Bash(rm -rf ~)",
+]

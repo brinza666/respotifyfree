@@ -3,8 +3,14 @@
 This folder is a **WebView + Chrome Custom Tabs** shell around the TypeScript
 engine in `src/lib/spotify`. It does not copy a library by itself.
 
-This Grok sandbox cannot compile an APK. Open the folder in **Android Studio**
-on your machine (File → Open → `android/`), set the engine URL, then Run.
+Build an APK from the repo root:
+
+```
+npm run setup:android   # once — JDK 17, Gradle, and ~/Android/Sdk
+npm run build:apk       # writes releases/respotify-debug.apk
+```
+
+Or open `android/` in Android Studio. Debug builds may load `http://` engine URLs on the local network; release still requires HTTPS.
 
 ## Engine URL
 

@@ -1,6 +1,4 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
-import { AuthProvider } from "@/lib/auth/provider";
-import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Respotify";
@@ -17,6 +15,9 @@ export const Route = createRootRoute({
           "Move playlists, liked songs, albums, artists, and podcasts from one Spotify account to another.",
       },
       { name: "theme-color", content: "#0b0e0c" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -27,8 +28,8 @@ export const Route = createRootRoute({
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
       },
-      { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/favicon.svg" },
     ],
   }),
   component: () => (
@@ -37,10 +38,7 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body>
-        <PreviewHostBridge />
-        <AuthProvider>
-          <Outlet />
-        </AuthProvider>
+        <Outlet />
         <Scripts />
       </body>
     </html>

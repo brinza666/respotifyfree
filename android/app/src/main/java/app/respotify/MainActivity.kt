@@ -107,9 +107,23 @@ class MainActivity : AppCompatActivity() {
         return view
     }
 
+    private fun isAllowedEngineUrl(url: String): Boolean {
+        if (url.startsWith("https://")) return true
+        if (!BuildConfig.DEBUG) return false
+        if (!url.startsWith("http://")) return false
+        val host = android.net.Uri.parse(url).host ?: return false
+        return host == "localhost" ||
+            host == "127.0.0.1" ||
+            host == "10.0.2.2" ||
+            host.endsWith(".local") ||
+            host.startsWith("192.168.") ||
+            host.startsWith("10.") ||
+            host.startsWith("172.")
+    }
+
     private fun openEngine(raw: String) {
         val url = raw.trim()
-        if (!url.startsWith("https://")) {
+        if (!isAllowedEngineUrl(url)) {
             showSetup()
             return
         }
@@ -133,14 +147,14 @@ class MainActivity : AppCompatActivity() {
             textSize = 28f
             setTextColor(0xFFE9EEE9.toInt())
         }
-        val hint = TextView(this).apply {
+        val hintView = TextView(this).apply {
             text = getString(R.string.engine_hint)
             textSize = 15f
             setTextColor(0xFF8F9A91.toInt())
             setPadding(0, pad / 2, 0, pad)
         }
         urlField = EditText(this).apply {
-            hint = "https://…"
+            this.hint = "https://…"
             setTextColor(0xFFE9EEE9.toInt())
             setHintTextColor(0xFF6B746E.toInt())
             setBackgroundColor(0xFF1C231E.toInt())
@@ -154,7 +168,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { openEngine(urlField.text.toString()) }
         }
         col.addView(title)
-        col.addView(hint)
+        col.addView(hintView)
         col.addView(urlField)
         col.addView(go)
         return col

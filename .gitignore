@@ -1,23 +1,23 @@
-### AL ###
-#Template for AL projects for Dynamics 365 Business Central
-#launch.json folder
-.vscode/
-#Cache folder
-.alcache/
-#Symbols folder
-.alpackages/
-#Snapshots folder
-.snapshots/
-#Testing Output folder
+node_modules/
+dist/
 .output/
-#Extension App-file
-*.app
-#Rapid Application Development File
-rad.json
-#Translation Base-file
-*.g.xlf
-#License-files
-*.bclicense
-*.flf
-#Test results file
-TestResults.xml
+.nitro/
+.tanstack/
+.vercel/
+.wrangler/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+*.tsbuildinfo
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/debug.keystore
+releases/*.apk
+.idea/
+*.iml
+.grok/*
+!.grok/config.toml

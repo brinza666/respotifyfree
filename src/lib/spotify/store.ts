@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { backupToSnapshot, parseBackup, parseSpotifyHistoryExport, snapshotToBackup } from "./backup";
 import { demoDestUser, demoSourceLibrary, demoWriter } from "./demo";
 import { grabLiveLibrary, liveWriter } from "./live";
-import { clientId, setClientId, startLogin } from "./pkce";
+import { clientId, seedClientId, setClientId, startLogin } from "./pkce";
 import { clearSession, readSession, writeSession } from "./session";
 import { countsFor, runTransfer } from "./transfer";
 import {
@@ -71,6 +71,7 @@ export const useRespotify = create<Store>((set, get) => ({
 
   hydrate: () => {
     if (typeof window === "undefined") return;
+    seedClientId();
     const source = readSession("source");
     const dest = readSession("destination");
     set({

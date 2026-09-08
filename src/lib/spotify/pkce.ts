@@ -40,14 +40,27 @@ export function redirectUri() {
   return `${window.location.origin}/callback`;
 }
 
+export function configuredClientId() {
+  return (import.meta.env.VITE_SPOTIFY_CLIENT_ID ?? "").trim();
+}
+
 export function clientId() {
-  return window.localStorage.getItem("respotify.clientId")?.trim() ?? "";
+  if (typeof window === "undefined") return configuredClientId();
+  return window.localStorage.getItem("respotify.clientId")?.trim() || configuredClientId();
 }
 
 export function setClientId(id: string) {
+  if (typeof window === "undefined") return;
   const next = id.trim();
   if (next) window.localStorage.setItem("respotify.clientId", next);
   else window.localStorage.removeItem("respotify.clientId");
+}
+
+export function seedClientId() {
+  if (typeof window === "undefined") return;
+  if (!window.localStorage.getItem("respotify.clientId") && configuredClientId()) {
+    window.localStorage.setItem("respotify.clientId", configuredClientId());
+  }
 }
 
 export async function startLogin(role: Role) {

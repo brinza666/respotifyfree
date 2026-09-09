@@ -8,8 +8,10 @@ import { clearSession, readSession, writeSession } from "./session";
 import { countsFor, runTransfer } from "./transfer";
 import {
   CATALOG_LABELS,
+  CATALOG_ORDER,
   DEFAULT_PREFS,
   DEFAULT_SELECTION,
+  hasAnyCatalog,
   type AppPrefs,
   type CatalogKey,
   type LibrarySnapshot,
@@ -51,6 +53,7 @@ type Store = {
   toggleCatalog: (key: CatalogKey) => void;
   setPrecise: (value: boolean) => void;
   setCopyFollowed: (value: boolean) => void;
+  setRebuildHidden: (value: boolean) => void;
   startTransfer: () => Promise<void>;
   pause: () => void;
   reset: () => void;
@@ -60,6 +63,35 @@ type Store = {
 };
 
 const PREFS_KEY = "respotify.prefs";
+const SELECTION_KEY = "respotify.selection";
+
+function persistSelection(selection: TransferSelection) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SELECTION_KEY, JSON.stringify(selection));
+}
+
+function readSavedSelection(): TransferSelection {
+  const selection = structuredClone(DEFAULT_SELECTION);
+  if (typeof window === "undefined") return selection;
+  try {
+    const raw = localStorage.getItem(SELECTION_KEY);
+    if (!raw) return selection;
+    const saved = JSON.parse(raw) as Partial<TransferSelection> & {
+      catalogs?: Partial<Record<CatalogKey, boolean>>;
+    };
+    if (typeof saved.copyFollowedAsNew === "boolean") selection.copyFollowedAsNew = saved.copyFollowedAsNew;
+    if (typeof saved.preciseLikes === "boolean") selection.preciseLikes = saved.preciseLikes;
+    if (typeof saved.rebuildHidden === "boolean") selection.rebuildHidden = saved.rebuildHidden;
+    if (saved.catalogs && typeof saved.catalogs === "object") {
+      for (const key of CATALOG_ORDER) {
+        if (typeof saved.catalogs[key] === "boolean") selection.catalogs[key] = saved.catalogs[key];
+      }
+    }
+  } catch {
+    /* keep defaults */
+  }
+  return selection;
+}
 
 function readPrefs(): AppPrefs {
   if (typeof window === "undefined") return { ...DEFAULT_PREFS };
@@ -124,17 +156,7 @@ export const useRespotify = create<Store>((set, get) => ({
     const source = readSession("source");
     const dest = readSession("destination");
     const prefs = readPrefs();
-    const selection = structuredClone(DEFAULT_SELECTION);
-    try {
-      const raw = localStorage.getItem("respotify.selection");
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<TransferSelection>;
-        if (typeof saved.copyFollowedAsNew === "boolean") selection.copyFollowedAsNew = saved.copyFollowedAsNew;
-        if (typeof saved.preciseLikes === "boolean") selection.preciseLikes = saved.preciseLikes;
-      }
-    } catch {
-      /* keep defaults */
-    }
+    const selection = readSavedSelection();
     set({
       hydrated: true,
       source,
@@ -228,12 +250,16 @@ export const useRespotify = create<Store>((set, get) => ({
       });
       return;
     }
+    if (!hasAnyCatalog(get().selection)) {
+      set({ error: format(get().locale, "pickAtLeastOne") });
+      return;
+    }
     set({ busy: true, error: null });
     try {
       let snapshot;
       let warnings: string[] = [];
       if (source.mode === "live") {
-        const grabbed = await grabLiveLibrary("source");
+        const grabbed = await grabLiveLibrary("source", get().selection);
         snapshot = grabbed.snapshot;
         warnings = grabbed.warnings;
       } else {
@@ -259,33 +285,23 @@ export const useRespotify = create<Store>((set, get) => ({
   toggleCatalog: (key) => {
     const selection = structuredClone(get().selection);
     selection.catalogs[key] = !selection.catalogs[key];
+    persistSelection(selection);
     set({ selection });
   },
 
   setPrecise: (value) => {
     const selection = { ...get().selection, preciseLikes: value };
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        "respotify.selection",
-        JSON.stringify({
-          copyFollowedAsNew: selection.copyFollowedAsNew,
-          preciseLikes: selection.preciseLikes,
-        }),
-      );
-    }
+    persistSelection(selection);
     set({ selection });
   },
   setCopyFollowed: (value) => {
     const selection = { ...get().selection, copyFollowedAsNew: value };
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        "respotify.selection",
-        JSON.stringify({
-          copyFollowedAsNew: selection.copyFollowedAsNew,
-          preciseLikes: selection.preciseLikes,
-        }),
-      );
-    }
+    persistSelection(selection);
+    set({ selection });
+  },
+  setRebuildHidden: (value) => {
+    const selection = { ...get().selection, rebuildHidden: value };
+    persistSelection(selection);
     set({ selection });
   },
 
@@ -332,7 +348,6 @@ export const useRespotify = create<Store>((set, get) => ({
       error: null,
       notice: null,
       busy: false,
-      selection: structuredClone(DEFAULT_SELECTION),
     });
   },
 

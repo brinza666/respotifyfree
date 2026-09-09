@@ -49,10 +49,10 @@ You sign in to Spotify twice — **source** (the account you are leaving), then 
 ### How to use
 
 1. Open [the app](https://brinza666.github.io/respotifyfree/) or install the [Android APK](https://github.com/brinza666/respotifyfree/releases).
-2. In **Setup**, paste your Spotify Client ID if it is empty. Add both emails under Users Management.
-3. Connect source, then destination.
-4. Leave **Copy followed playlists as new** on (connect screen, before the scan).
-5. Pick catalogs and start the transfer.
+2. Tick what to copy **before** you connect. Unticked catalogs are skipped.
+3. In **Setup**, paste your Spotify Client ID if it is empty. Add both emails under Users Management.
+4. Connect source, then destination.
+5. Confirm the list (counts appear after the scan) and start the transfer.
 6. Optionally download a `respotify-backup.json`.
 
 The website has a **walkthrough video**. **Run demo transfer** walks the wizard without writing to Spotify.
@@ -68,6 +68,15 @@ Auth is official Spotify OAuth (Authorization Code + PKCE). Cookie or password c
 - Login still uses Spotify’s own page
 
 The `gh-pages` branch is only the published website. Edit source on `main`.
+
+### Support
+
+You get the library. I get one coffee. The unicorn gets its playlists back. Probably.
+
+- [Buy me a coffee](https://www.buymeacoffee.com/brinza)
+- [PayPal](https://paypal.me/brinza666)
+
+![Buy me a coffee](docs/bmc-qr.png)
 
 ### Privacy
 
@@ -116,10 +125,10 @@ Android APK: **[GitHub Releases](https://github.com/brinza666/respotifyfree/rele
 ### Как пользоваться
 
 1. Откройте [приложение](https://brinza666.github.io/respotifyfree/) или установите [Android APK](https://github.com/brinza666/respotifyfree/releases).
-2. В **Настройке** вставьте Spotify Client ID, если поле пустое. Добавьте оба email в Users Management.
-3. Подключите источник, затем назначение.
-4. Оставьте включённым **Копировать чужие плейлисты как новые** (экран входа, до сканирования).
-5. Выберите разделы и запустите перенос.
+2. Отметьте, что копировать, **до** входа. Снятые разделы не сканируются.
+3. В **Настройке** вставьте Spotify Client ID, если поле пустое. Добавьте оба email в Users Management.
+4. Подключите источник, затем назначение.
+5. Проверьте список (после скана появятся числа) и запустите перенос.
 6. При желании скачайте `respotify-backup.json`.
 
 На сайте есть **видео-обзор**. **Демо-перенос** показывает мастер, ничего не записывая в Spotify.
@@ -135,6 +144,15 @@ Android APK: **[GitHub Releases](https://github.com/brinza666/respotifyfree/rele
 - Вход по-прежнему идёт через страницу Spotify
 
 Ветка `gh-pages` — только опубликованный сайт. Править исходники нужно в `main`.
+
+### Поддержать
+
+Вы получаете библиотеку. Я — один кофе. Единорог — свои плейлисты. Наверное.
+
+- [Купи мне кофе](https://www.buymeacoffee.com/brinza)
+- [PayPal](https://paypal.me/brinza666)
+
+![Купи мне кофе](docs/bmc-qr.png)
 
 ### Приватность
 

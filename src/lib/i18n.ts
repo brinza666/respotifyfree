@@ -3,6 +3,8 @@ import type { CatalogKey } from "./spotify/types";
 export const REPO_URL = "https://github.com/brinza666/respotifyfree";
 export const RELEASES_URL = `${REPO_URL}/releases`;
 export const APP_URL = "https://brinza666.github.io/respotifyfree/";
+export const PAYPAL_URL = "https://paypal.me/brinza666";
+export const BMC_URL = "https://www.buymeacoffee.com/brinza";
 
 export type Locale = "en" | "ru";
 
@@ -37,7 +39,15 @@ const en = {
   watchDemoHelp: "Silent demo. Nothing is written to Spotify.",
   copyFollowed: "Copy followed playlists as new",
   copyFollowedHelp:
-    "On before you scan. Radio / Popular lists rebuild from Spotify search when the original songs are hidden. Uncheck to only follow the original list.",
+    "Create a new playlist on the destination. Off = only follow the original list.",
+  pickTitle: "What to copy",
+  pickLead: "Tick catalogs before you connect. Unticked items are skipped.",
+  pickAtLeastOne: "Tick at least one catalog.",
+  radioPopular: "Radio / Popular (rebuild from search)",
+  recentHint:
+    "Spotify will not write listening history. Respotify saves the last plays as a playlist archive — not real history.",
+  radioHint:
+    "Spotify hides Radio / Popular tracks. On: search for matching songs and build a new playlist. Daily Mix / Discover Weekly still cannot copy.",
   honestyTitle: "What this can and cannot copy",
   honestyBody:
     "Playlists, liked songs, albums, artists, podcasts, and episodes copy through Spotify’s official API. Radio / Popular lists that Spotify will not return are rebuilt from search (songs Spotify can find). Daily Mix, Discover Weekly, and similar Made For You lists stay hidden. Listening history, Wrapped, followers, and the taste algorithm cannot be written to another account. Recently played is saved as a playlist archive.",
@@ -76,6 +86,16 @@ const en = {
   apkHelp: "Sideload the debug APK from GitHub Releases. Enable Install unknown apps if Android asks.",
   githubReleases: "Open GitHub Releases",
   githubRepo: "Source on GitHub",
+  donateLine:
+    "You get the library. I get one coffee. The unicorn gets its playlists back. Probably.",
+  donateLineArtists:
+    "You got {n} artists. I get one coffee. The unicorn gets its playlists back. Probably.",
+  donatePayPal: "PayPal",
+  donateBmc: "Buy me a coffee",
+  donateQrAlt: "QR code for buymeacoffee.com/brinza",
+  aboutTitle: "About",
+  aboutBody:
+    "I build things, break things, fix them, and occasionally pretend that was the plan all along. Most of the time, I’m working on useful digital projects, tools, and experiments that somehow sounded like a great idea at 2 AM.\n\nYou get something useful. I get a coffee — something I definitely need around 2 AM. And the unicorn gets its magic back. Hmm… probably. We’re still debugging that part.\n\nIf something I made saved you some time, solved a problem, or just made your day a little easier, feel free to fuel the next questionable idea with a donation. ☕🦄",
   liveSpotify: "Live Spotify",
   liveHelp:
     "Create an app in the Spotify Developer Dashboard, add this Redirect URI, then paste the Client ID. Add both Spotify emails under Users Management (development mode, max 5). The dashboard owner needs Premium.",
@@ -155,7 +175,15 @@ const ru: typeof en = {
   watchDemoHelp: "Немое демо. В Spotify ничего не пишется.",
   copyFollowed: "Копировать чужие плейлисты как новые",
   copyFollowedHelp:
-    "Включайте до сканирования. Радио и Popular собираются поиском Spotify, если исходные треки скрыты. Снимите галочку, чтобы только подписаться на оригинал.",
+    "Создать новый плейлист в назначении. Выкл = только подписаться на оригинал.",
+  pickTitle: "Что копировать",
+  pickLead: "Отметьте разделы до входа. Снятые галочки в перенос не входят.",
+  pickAtLeastOne: "Отметьте хотя бы один раздел.",
+  radioPopular: "Radio / Popular (сборка поиском)",
+  recentHint:
+    "Spotify не записывает чужую историю прослушивания. Respotify сохраняет последние треки как архивный плейлист — это не настоящая история.",
+  radioHint:
+    "Spotify скрывает треки Radio / Popular. Вкл: поиск совпадений и новый плейлист. Daily Mix и Discover Weekly всё равно не копируются.",
   honestyTitle: "Что копируется и что нет",
   honestyBody:
     "Плейлисты, любимые треки, альбомы, исполнители, подкасты и эпизоды копируются через официальный API Spotify. Радио и Popular, которые Spotify не отдаёт, собираются поиском (те треки, которые Spotify находит). Daily Mix, Discover Weekly и другие Made For You остаются скрытыми. Историю прослушивания, Wrapped, подписчиков и алгоритм вкуса записать в другой аккаунт нельзя. Недавно проигранное сохраняется как архивный плейлист.",
@@ -194,6 +222,16 @@ const ru: typeof en = {
   apkHelp: "Установите debug APK со страницы GitHub Releases. Разрешите установку из неизвестных источников, если Android спросит.",
   githubReleases: "Открыть GitHub Releases",
   githubRepo: "Исходный код на GitHub",
+  donateLine:
+    "Вы получаете библиотеку. Я — один кофе. Единорог — свои плейлисты. Наверное.",
+  donateLineArtists:
+    "Вы получили {n} исполнителей. Я — один кофе. Единорог — свои плейлисты. Наверное.",
+  donatePayPal: "PayPal",
+  donateBmc: "Купи мне кофе",
+  donateQrAlt: "QR-код на buymeacoffee.com/brinza",
+  aboutTitle: "Об авторе",
+  aboutBody:
+    "Я делаю штуки. Ломаю штуки. Чиню штуки. Иногда именно в таком порядке, иногда нет — и периодически делаю вид, что всё так и было задумано.\n\nВ основном это полезные цифровые проекты, инструменты и эксперименты, которые в 02:00 каким-то образом выглядят как абсолютно разумные инженерные решения.\n\nВы получаете что-то полезное.\nЯ получаю кофе.\nЕдинорог получает обратно свою магию.\n\nХм… наверное. Мы всё ещё дебажим этот момент.\n\nЕсли какой-то из моих проектов сэкономил вам время, решил проблему или хотя бы не сломал ничего важного — можете поддержать разработку следующей сомнительно-гениальной идеи. ☕🦄",
   liveSpotify: "Живой Spotify",
   liveHelp:
     "Создайте приложение в Spotify Developer Dashboard, добавьте этот Redirect URI, затем вставьте Client ID. Добавьте оба email Spotify в Users Management (режим разработки, максимум 5). Владельцу кабинета нужен Premium.",

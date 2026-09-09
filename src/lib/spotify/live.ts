@@ -20,6 +20,7 @@ import type {
   ShowRef,
   SpotifyUser,
   TrackRef,
+  TransferSelection,
 } from "./types";
 
 const API = "https://api.spotify.com/v1";
@@ -402,7 +403,11 @@ async function resolveLooseTracks(role: Role, tracks: TrackRef[]): Promise<Track
   return out;
 }
 
-async function fillPlaylist(role: Role, list: PlaylistRef): Promise<PlaylistRef> {
+async function fillPlaylist(
+  role: Role,
+  list: PlaylistRef,
+  rebuildHidden: boolean,
+): Promise<PlaylistRef> {
   let tracks = await playlistTracks(role, list.id);
   let trackSource = list.trackSource;
 
@@ -410,7 +415,7 @@ async function fillPlaylist(role: Role, list: PlaylistRef): Promise<PlaylistRef>
     return { ...list, tracks: [], trackCount: 0, trackSource: "hidden" };
   }
 
-  if (tracks.length === 0 && !list.owned) {
+  if (rebuildHidden && tracks.length === 0 && !list.owned) {
     tracks = await searchRebuild(role, list);
     if (tracks.length) trackSource = "search";
   }
@@ -424,34 +429,51 @@ async function fillPlaylist(role: Role, list: PlaylistRef): Promise<PlaylistRef>
   };
 }
 
-export async function grabLiveLibrary(role: Role): Promise<{ snapshot: LibrarySnapshot; warnings: string[] }> {
+export async function grabLiveLibrary(
+  role: Role,
+  selection?: TransferSelection,
+): Promise<{ snapshot: LibrarySnapshot; warnings: string[] }> {
   const user = await fetchMe(role);
   const warnings: string[] = [];
+  const catalogs = selection?.catalogs;
+  const want = (key: keyof NonNullable<TransferSelection["catalogs"]>) => !catalogs || catalogs[key];
+  const rebuildHidden = selection?.rebuildHidden !== false;
+
+  const empty = <T>(value: T) => Promise.resolve(value);
 
   const [liked, albums, shows, episodes, playlists, artists, recentlyPlayed, topTracks] =
     await Promise.all([
-      tryCatalog("Liked songs", () => paginate(role, "/me/tracks?limit=50", (j) => compactMap(itemsOf(j), asTrack)), warnings),
-      tryCatalog("Saved albums", () => paginate(role, "/me/albums?limit=50", (j) => compactMap(itemsOf(j), asAlbum)), warnings),
-      tryCatalog("Podcasts", () => paginate(role, "/me/shows?limit=50", (j) => compactMap(itemsOf(j), asShow)), warnings),
-      tryCatalog("Saved episodes", () => paginate(role, "/me/episodes?limit=50", (j) => compactMap(itemsOf(j), asEpisode)), warnings),
-      tryCatalog("Playlists", () => paginate(role, "/me/playlists?limit=50", (j) => itemsOf(j).filter((p) => p != null)), warnings),
-      tryCatalog(
-        "Followed artists",
-        () => paginate(role, "/me/following?type=artist&limit=50", (j) => compactMap(itemsOf(j), asArtist)),
-        warnings,
-      ),
-      tryCatalog("Recently played", async () => {
-        const res = await spotifyFetch(role, "/me/player/recently-played?limit=50");
-        if (!res.ok) return [] as TrackRef[];
-        const j = (await res.json()) as Record<string, unknown>;
-        return compactMap(itemsOf(j), asTrack);
-      }, warnings),
-      tryCatalog("Top tracks", async () => {
-        const res = await spotifyFetch(role, "/me/top/tracks?time_range=long_term&limit=50");
-        if (!res.ok) return [] as TrackRef[];
-        const j = (await res.json()) as Record<string, unknown>;
-        return compactMap(itemsOf(j), (t) => asTrack({ track: t }));
-      }, warnings),
+      want("liked")
+        ? tryCatalog("Liked songs", () => paginate(role, "/me/tracks?limit=50", (j) => compactMap(itemsOf(j), asTrack)), warnings)
+        : empty([] as TrackRef[]),
+      want("albums")
+        ? tryCatalog("Saved albums", () => paginate(role, "/me/albums?limit=50", (j) => compactMap(itemsOf(j), asAlbum)), warnings)
+        : empty([] as AlbumRef[]),
+      want("shows")
+        ? tryCatalog("Podcasts", () => paginate(role, "/me/shows?limit=50", (j) => compactMap(itemsOf(j), asShow)), warnings)
+        : empty([] as ShowRef[]),
+      want("episodes")
+        ? tryCatalog("Saved episodes", () => paginate(role, "/me/episodes?limit=50", (j) => compactMap(itemsOf(j), asEpisode)), warnings)
+        : empty([] as EpisodeRef[]),
+      want("ownedPlaylists") || want("followedPlaylists")
+        ? tryCatalog("Playlists", () => paginate(role, "/me/playlists?limit=50", (j) => itemsOf(j).filter((p) => p != null)), warnings)
+        : empty([] as unknown[]),
+      want("artists")
+        ? tryCatalog(
+            "Followed artists",
+            () => paginate(role, "/me/following?type=artist&limit=50", (j) => compactMap(itemsOf(j), asArtist)),
+            warnings,
+          )
+        : empty([] as ArtistRef[]),
+      want("recentArchive")
+        ? tryCatalog("Recently played", async () => {
+            const res = await spotifyFetch(role, "/me/player/recently-played?limit=50");
+            if (!res.ok) return [] as TrackRef[];
+            const j = (await res.json()) as Record<string, unknown>;
+            return compactMap(itemsOf(j), asTrack);
+          }, warnings)
+        : empty([] as TrackRef[]),
+      empty([] as TrackRef[]),
     ]);
 
   const detailed: PlaylistRef[] = [];
@@ -478,8 +500,10 @@ export async function grabLiveLibrary(role: Role): Promise<{ snapshot: LibrarySn
       trackCount: p.items?.total ?? p.tracks?.total ?? 0,
       tracks: [],
     };
+    if (stub.owned && !want("ownedPlaylists")) continue;
+    if (!stub.owned && !want("followedPlaylists")) continue;
     try {
-      detailed.push(await fillPlaylist(role, stub));
+      detailed.push(await fillPlaylist(role, stub, rebuildHidden));
     } catch (err) {
       warnings.push(
         `${stub.name} could not be filled: ${err instanceof Error ? err.message : String(err)}`,

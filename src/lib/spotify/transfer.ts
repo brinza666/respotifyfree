@@ -164,7 +164,12 @@ export async function runTransfer(opts: {
           });
           try {
             let uris = list.tracks.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
-            if (selection.copyFollowedAsNew && uris.length === 0 && writer.rebuildTracks) {
+            if (
+              selection.rebuildHidden &&
+              selection.copyFollowedAsNew &&
+              uris.length === 0 &&
+              writer.rebuildTracks
+            ) {
               const rebuilt = await writer.rebuildTracks(list);
               uris = rebuilt.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
             }
@@ -185,7 +190,7 @@ export async function runTransfer(opts: {
               try {
                 await writer.followPlaylist(list.id);
               } catch (followErr) {
-                if (writer.rebuildTracks) {
+                if (selection.rebuildHidden && writer.rebuildTracks) {
                   const rebuilt = await writer.rebuildTracks(list);
                   uris = rebuilt.map((t) => t.uri).filter((u) => u.startsWith("spotify:track:"));
                   if (uris.length > 0) {

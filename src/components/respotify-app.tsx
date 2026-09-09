@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   ArrowRight,
   Check,
+  CircleHelp,
+  Coffee,
   Disc3,
   Download,
   FolderInput,
@@ -13,10 +15,25 @@ import {
   Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { catalogLabel, failedLabel, format, RELEASES_URL, REPO_URL, type MessageKey } from "@/lib/i18n";
+import {
+  BMC_URL,
+  catalogLabel,
+  failedLabel,
+  format,
+  PAYPAL_URL,
+  RELEASES_URL,
+  REPO_URL,
+  type MessageKey,
+} from "@/lib/i18n";
 import { downloadBackup } from "@/lib/spotify/backup";
 import { countsFor, snapshotToBackup, useRespotify } from "@/lib/spotify/store";
-import type { CatalogKey, Session } from "@/lib/spotify/types";
+import {
+  CATALOG_ORDER,
+  hasAnyCatalog,
+  type CatalogKey,
+  type PlaylistRef,
+  type Session,
+} from "@/lib/spotify/types";
 import { cn } from "@/lib/utils";
 
 type Tab = "transfer" | "backup" | "setup";
@@ -197,6 +214,7 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
   const disconnect = useRespotify((s) => s.disconnect);
   const runDemoBoth = useRespotify((s) => s.runDemoBoth);
   const loadSourceLibrary = useRespotify((s) => s.loadSourceLibrary);
+  const selection = useRespotify((s) => s.selection);
 
   return (
     <div className="flex flex-col gap-8">
@@ -207,6 +225,8 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
         </h1>
         <p className="max-w-prose text-muted">{t("lead")}</p>
       </section>
+
+      <CatalogPicker />
 
       {typeof window !== "undefined" && new URLSearchParams(window.location.search).has("shot") ? null : (
         <DemoVideo />
@@ -236,10 +256,12 @@ function HomeStep({ onOpenSetup }: { onOpenSetup: () => void }) {
       {error && <Callout tone="danger">{error}</Callout>}
       {notice && <Callout>{notice}</Callout>}
 
-      <CopyFollowedToggle />
-
       <div className="flex flex-col gap-2">
-        <Button block disabled={!source || !dest || busy} onClick={() => void loadSourceLibrary()}>
+        <Button
+          block
+          disabled={!source || !dest || busy || !hasAnyCatalog(selection)}
+          onClick={() => void loadSourceLibrary()}
+        >
           {busy ? t("readingLibrary") : t("continue")}
           <ArrowRight className="size-4" />
         </Button>
@@ -318,18 +340,146 @@ function AccountCard({
   );
 }
 
-function SelectStep() {
+function Hint({ text }: { text: string }) {
+  const id = useId();
+  return (
+    <span className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        className="peer grid size-8 place-items-center rounded-full text-faint hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+        aria-describedby={id}
+        aria-label={text}
+      >
+        <CircleHelp className="size-4" />
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className="pointer-events-none absolute right-0 bottom-full z-30 mb-1 hidden w-64 rounded-md border border-border bg-raised px-3 py-2 text-left text-xs leading-snug text-muted shadow-lg peer-hover:block peer-focus:block"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+function CatalogPicker({
+  counts,
+  owned,
+  followed,
+}: {
+  counts?: Record<CatalogKey, number>;
+  owned?: PlaylistRef[];
+  followed?: PlaylistRef[];
+}) {
   const t = useT();
   const locale = useRespotify((s) => s.locale);
-  const snapshot = useRespotify((s) => s.snapshot);
   const selection = useRespotify((s) => s.selection);
-  const dest = useRespotify((s) => s.dest);
   const toggleCatalog = useRespotify((s) => s.toggleCatalog);
   const setPrecise = useRespotify((s) => s.setPrecise);
+  const setCopyFollowed = useRespotify((s) => s.setCopyFollowed);
+  const setRebuildHidden = useRespotify((s) => s.setRebuildHidden);
+
+  return (
+    <section className="flex flex-col gap-3">
+      {!counts ? (
+        <div>
+          <h2 className="text-sm font-medium">{t("pickTitle")}</h2>
+          <p className="mt-1 text-sm text-muted">{t("pickLead")}</p>
+        </div>
+      ) : null}
+      <ul className="flex flex-col gap-2">
+        {CATALOG_ORDER.map((key) => {
+          const hint = key === "recentArchive" ? t("recentHint") : undefined;
+          return (
+            <li key={key}>
+              <div className="rounded-lg border border-border bg-surface">
+                <div className="flex items-center gap-1 pr-2">
+                  <label className="flex min-h-14 min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4">
+                    <span>
+                      <span className="block text-sm font-medium">{catalogLabel(locale, key)}</span>
+                      {key === "recentArchive" ? (
+                        <span className="block text-xs text-faint">{t("recentNote")}</span>
+                      ) : null}
+                    </span>
+                    <span className="flex items-center gap-3">
+                      {counts ? (
+                        <span className="font-mono text-sm tabular-nums text-muted">{counts[key]}</span>
+                      ) : null}
+                      <input
+                        type="checkbox"
+                        checked={selection.catalogs[key]}
+                        onChange={() => toggleCatalog(key)}
+                        className="size-5 accent-primary"
+                      />
+                    </span>
+                  </label>
+                  {hint ? <Hint text={hint} /> : null}
+                </div>
+                {key === "ownedPlaylists" && owned ? <div className="px-3 pb-2"><PlaylistPeek lists={owned} /></div> : null}
+                {key === "followedPlaylists" && followed ? (
+                  <div className="px-3 pb-2">
+                    <PlaylistPeek lists={followed} />
+                  </div>
+                ) : null}
+                {key === "followedPlaylists" && selection.catalogs.followedPlaylists ? (
+                  <div className="border-t border-border px-4 py-3">
+                    <CheckRow
+                      checked={selection.copyFollowedAsNew}
+                      onChange={setCopyFollowed}
+                      title={t("copyFollowed")}
+                      help={t("copyFollowedHelp")}
+                    />
+                  </div>
+                ) : null}
+                {key === "liked" && selection.catalogs.liked ? (
+                  <div className="border-t border-border px-4 py-3">
+                    <CheckRow
+                      checked={selection.preciseLikes}
+                      onChange={setPrecise}
+                      title={t("preciseLikes")}
+                      help={t("preciseLikesHelp")}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+        <li>
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-surface pr-2">
+            <label
+              className={cn(
+                "flex min-h-14 min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4",
+                !selection.catalogs.followedPlaylists && "opacity-50",
+              )}
+            >
+              <span className="text-sm font-medium">{t("radioPopular")}</span>
+              <input
+                type="checkbox"
+                className="size-5 accent-primary"
+                checked={selection.rebuildHidden}
+                disabled={!selection.catalogs.followedPlaylists}
+                onChange={(e) => setRebuildHidden(e.target.checked)}
+              />
+            </label>
+            <Hint text={t("radioHint")} />
+          </div>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+function SelectStep() {
+  const t = useT();
+  const snapshot = useRespotify((s) => s.snapshot);
+  const dest = useRespotify((s) => s.dest);
   const startTransfer = useRespotify((s) => s.startTransfer);
   const backFromWizard = useRespotify((s) => s.backFromWizard);
   const notice = useRespotify((s) => s.notice);
   const showMoreInfo = useRespotify((s) => s.showMoreInfo);
+  const selection = useRespotify((s) => s.selection);
   const counts = useMemo(() => (snapshot ? countsFor(snapshot) : null), [snapshot]);
 
   if (!snapshot || !counts) return null;
@@ -350,57 +500,13 @@ function SelectStep() {
           </div>
         ) : null}
       </div>
-      <ul className="flex flex-col gap-2">
-        {(
-          [
-            "liked",
-            "albums",
-            "ownedPlaylists",
-            "followedPlaylists",
-            "artists",
-            "shows",
-            "episodes",
-            "recentArchive",
-          ] as CatalogKey[]
-        ).map((key) => (
-          <li key={key}>
-            <label className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4">
-              <span>
-                <span className="block text-sm font-medium">{catalogLabel(locale, key)}</span>
-                {key === "recentArchive" && (
-                  <span className="block text-xs text-faint">{t("recentNote")}</span>
-                )}
-              </span>
-              <span className="flex items-center gap-3">
-                <span className="font-mono text-sm tabular-nums text-muted">{counts[key]}</span>
-                <input
-                  type="checkbox"
-                  checked={selection.catalogs[key]}
-                  onChange={() => toggleCatalog(key)}
-                  className="size-5 accent-primary"
-                />
-              </span>
-            </label>
-            {showMoreInfo && key === "ownedPlaylists" ? <PlaylistPeek lists={owned} /> : null}
-            {showMoreInfo && key === "followedPlaylists" ? <PlaylistPeek lists={followed} /> : null}
-          </li>
-        ))}
-      </ul>
-      <label className="flex items-start gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-        <input
-          type="checkbox"
-          className="mt-0.5 size-5 accent-primary"
-          checked={selection.preciseLikes}
-          onChange={(e) => setPrecise(e.target.checked)}
-        />
-        <span>
-          <span className="font-medium">{t("preciseLikes")}</span>
-          <span className="mt-1 block text-muted">{t("preciseLikesHelp")}</span>
-        </span>
-      </label>
-      <CopyFollowedToggle />
+      <CatalogPicker
+        counts={counts}
+        owned={showMoreInfo ? owned : undefined}
+        followed={showMoreInfo ? followed : undefined}
+      />
       <div className="flex flex-col gap-2">
-        <Button block onClick={() => void startTransfer()}>
+        <Button block disabled={!hasAnyCatalog(selection)} onClick={() => void startTransfer()}>
           {t("startTransfer")}
         </Button>
         <Button variant="ghost" onClick={backFromWizard}>
@@ -557,6 +663,7 @@ function DoneStep() {
           {t("another")}
         </Button>
       </div>
+      <DonateCard artists={report?.copied.artists} />
     </div>
   );
 }
@@ -617,6 +724,8 @@ function SetupTab() {
   const setShowMoreInfo = useRespotify((s) => s.setShowMoreInfo);
   const locale = useRespotify((s) => s.locale);
   const setLocale = useRespotify((s) => s.setLocale);
+  const rebuildHidden = useRespotify((s) => s.selection.rebuildHidden);
+  const setRebuildHidden = useRespotify((s) => s.setRebuildHidden);
   const standalone =
     typeof window !== "undefined" &&
     (window.matchMedia("(display-mode: standalone)").matches ||
@@ -697,6 +806,12 @@ function SetupTab() {
         <div className="mt-3 flex flex-col gap-3">
           <CopyFollowedToggle nested />
           <PreciseLikesToggle />
+          <CheckRow
+            checked={rebuildHidden}
+            onChange={setRebuildHidden}
+            title={t("radioPopular")}
+            help={t("radioHint")}
+          />
         </div>
       </details>
 
@@ -718,6 +833,9 @@ function SetupTab() {
           {t("githubRepo")}
         </a>
       </div>
+
+      <DonateCard />
+      <About />
     </div>
   );
 }
@@ -790,6 +908,66 @@ function CopyFollowedToggle({ nested = false }: { nested?: boolean }) {
         <span className="mt-1 block text-muted">{t("copyFollowedHelp")}</span>
       </span>
     </label>
+  );
+}
+
+function DonateCard({ artists }: { artists?: number }) {
+  const t = useT();
+  const base = import.meta.env.BASE_URL;
+  const line =
+    typeof artists === "number" && artists > 0
+      ? t("donateLineArtists", { n: artists })
+      : t("donateLine");
+  return (
+    <aside className="rounded-xl border border-border bg-surface p-4">
+      <div className="flex items-start gap-3">
+        <Coffee className="mt-0.5 size-4 shrink-0 text-primary" />
+        <p className="text-sm">{line}</p>
+      </div>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <a
+          href={BMC_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-fg"
+        >
+          {t("donateBmc")}
+        </a>
+        <a
+          href={PAYPAL_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md border border-border bg-raised px-4 text-sm font-medium"
+        >
+          {t("donatePayPal")}
+        </a>
+      </div>
+      <img
+        src={`${base}bmc-qr.png`}
+        alt={t("donateQrAlt")}
+        width={324}
+        height={325}
+        className="mx-auto mt-4 size-40 rounded-md bg-white p-2"
+      />
+    </aside>
+  );
+}
+
+function About() {
+  const t = useT();
+  return (
+    <details className="rounded-xl border border-border bg-surface p-4">
+      <summary className="cursor-pointer text-sm font-medium">{t("aboutTitle")}</summary>
+      <div className="mt-3 flex flex-col gap-3 text-sm text-muted">
+        {t("aboutBody")
+          .split("\n\n")
+          .map((para) => (
+            <p key={para.slice(0, 24)} className="whitespace-pre-line">
+              {para}
+            </p>
+          ))}
+      </div>
+    </details>
   );
 }
 

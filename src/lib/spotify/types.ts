@@ -63,6 +63,8 @@ export type TransferSelection = {
   catalogs: Record<CatalogKey, boolean>;
   preciseLikes: boolean;
   copyFollowedAsNew: boolean;
+  /** Rebuild Radio / Popular (and similar hidden follows) from Spotify search. */
+  rebuildHidden: boolean;
 };
 
 export type ProgressEvent = {
@@ -139,7 +141,23 @@ export const DEFAULT_SELECTION: TransferSelection = {
   },
   preciseLikes: false,
   copyFollowedAsNew: true,
+  rebuildHidden: true,
 };
+
+export const CATALOG_ORDER: CatalogKey[] = [
+  "ownedPlaylists",
+  "followedPlaylists",
+  "liked",
+  "albums",
+  "artists",
+  "shows",
+  "episodes",
+  "recentArchive",
+];
+
+export function hasAnyCatalog(selection: TransferSelection): boolean {
+  return CATALOG_ORDER.some((key) => selection.catalogs[key]);
+}
 
 export const CATALOG_LABELS: Record<CatalogKey, string> = {
   liked: "Liked songs",

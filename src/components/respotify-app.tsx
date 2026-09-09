@@ -422,6 +422,7 @@ function PlaylistPeek({
           <span className="truncate">{list.name}</span>
           <span className="shrink-0 font-mono tabular-nums text-faint">
             {list.trackCount}
+            {list.trackCount === 0 && !list.trackSource ? ` · ${t("emptyList")}` : ""}
             {list.trackSource === "search" ? ` · ${t("rebuilt")}` : ""}
             {list.trackSource === "hidden" ? ` · ${t("hiddenList")}` : ""}
           </span>
@@ -500,6 +501,15 @@ function DoneStep() {
   const snapshot = useRespotify((s) => s.snapshot);
   const dest = useRespotify((s) => s.dest);
   const reset = useRespotify((s) => s.reset);
+  const showMoreInfo = useRespotify((s) => s.showMoreInfo);
+  const copiedOwned = useMemo(() => {
+    if (!snapshot || !report) return [];
+    return snapshot.playlists.filter((p) => p.owned && report.playlistMap[p.id]);
+  }, [snapshot, report]);
+  const copiedFollowed = useMemo(() => {
+    if (!snapshot || !report) return [];
+    return snapshot.playlists.filter((p) => !p.owned && report.playlistMap[p.id]);
+  }, [snapshot, report]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -508,11 +518,23 @@ function DoneStep() {
         <p className="mt-2 text-sm text-muted">{t("doneLead", { name: dest?.user.displayName ?? "" })}</p>
       </div>
       {report && (
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+        <ul className="overflow-hidden rounded-xl border border-border bg-surface">
           {Object.entries(report.copied).map(([key, n]) => (
-            <li key={key} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span>{catalogLabel(locale, key as CatalogKey)}</span>
-              <span className="font-mono tabular-nums text-muted">{n}</span>
+            <li key={key} className="border-t border-border first:border-t-0">
+              <div className="flex items-center justify-between px-4 py-3 text-sm">
+                <span>{catalogLabel(locale, key as CatalogKey)}</span>
+                <span className="font-mono tabular-nums text-muted">{n}</span>
+              </div>
+              {showMoreInfo && key === "ownedPlaylists" ? (
+                <div className="px-3 pb-2">
+                  <PlaylistPeek lists={copiedOwned} />
+                </div>
+              ) : null}
+              {showMoreInfo && key === "followedPlaylists" ? (
+                <div className="px-3 pb-2">
+                  <PlaylistPeek lists={copiedFollowed} />
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -172,6 +172,9 @@ function DemoVideo() {
         key={src}
         controls
         playsInline
+        muted
+        loop
+        autoPlay
         preload="metadata"
         poster={poster}
         className="mx-auto max-h-[min(70vh,640px)] w-full bg-bg object-contain"

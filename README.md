@@ -71,7 +71,7 @@ The `gh-pages` branch is only the published website. Edit source on `main`.
 
 ### Support
 
-You get the library. I get one coffee. The unicorn gets its playlists back. Probably.
+You get the library. I get one coffee. The unicorn gets its playlists back. Probably...
 
 - [Buy me a coffee](https://www.buymeacoffee.com/brinza)
 - [PayPal](https://paypal.me/brinza666)
@@ -147,7 +147,7 @@ Android APK: **[GitHub Releases](https://github.com/brinza666/respotifyfree/rele
 
 ### Поддержать
 
-Вы получаете библиотеку. Я — один кофе. Единорог — свои плейлисты. Наверное.
+Вы получаете библиотеку. Я — один кофе. Единорог — свои плейлисты. Все в Плюсе, наверное.
 
 - [Купи мне кофе](https://www.buymeacoffee.com/brinza)
 - [PayPal](https://paypal.me/brinza666)
